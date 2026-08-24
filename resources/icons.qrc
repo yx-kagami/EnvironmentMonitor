@@ -1,0 +1,22 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <!-- Temperature icon -->
+    <file alias="temperature.png">icons/temperature.png</file>
+    <!-- Humidity icon -->
+    <file alias="humidity.png">icons/humidity.png</file>
+    <!-- Light icon -->
+    <file alias="light.png">icons/light.png</file>
+    <!-- Switch on icon -->
+    <file alias="switch_on.png">icons/switch_on.png</file>
+    <!-- Switch off icon -->
+    <file alias="switch_off.png">icons/switch_off.png</file>
+    <!-- Connection on icon -->
+    <file alias="connection_on.png">icons/connection_on.png</file>
+    <!-- Connection off icon -->
+    <file alias="connection_off.png">icons/connection_off.png</file>
+    <!-- Warning icon -->
+    <file alias="warning.png">icons/warning.png</file>
+    <!-- Settings icon -->
+    <file alias="settings.png">icons/settings.png</file>
+</qresource>
+</RCC>

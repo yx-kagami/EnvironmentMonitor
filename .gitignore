@@ -1,0 +1,27 @@
+# Qt/CMake 构建产物
+build*/
+*.user
+*.user.*
+.qtcreator/
+
+# 编译产物
+*.exe
+*.o
+*.obj
+
+# 运行时产物（日志/本地数据库/崩溃转储）
+*.log
+app.log
+*.db
+*.sqlite
+*.dmp
+
+# 编辑器/系统杂项
+*.autosave
+Thumbs.db
+Desktop.ini
+
+# 防止在源码目录内直接配置构建
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json

@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>智能环境监控系统</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QScrollArea" name="mainScrollArea">
+      <property name="widgetResizable">
+       <bool>true</bool>
+      </property>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarAsNeeded</enum>
+      </property>
+      <property name="verticalScrollBarPolicy">
+       <enum>Qt::ScrollBarAsNeeded</enum>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::NoFrame</enum>
+      </property>
+      <widget class="QWidget" name="scrollAreaWidgetContents">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>1200</width>
+         <height>800</height>
+        </rect>
+       </property>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <property name="leftMargin">
+         <number>10</number>
+        </property>
+        <property name="topMargin">
+         <number>10</number>
+        </property>
+        <property name="rightMargin">
+         <number>10</number>
+        </property>
+        <property name="bottomMargin">
+         <number>10</number>
+        </property>
+        <item>
+         <layout class="QVBoxLayout" name="leftSidebarLayout">
+          <property name="spacing">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QWidget" name="sensorDisplayPlaceholder" native="true">
+            <property name="minimumSize">
+             <size>
+              <width>200</width>
+              <height>110</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>260</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">/* 样式由全局样式表控制 */</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="switchControlPlaceholder" native="true">
+            <property name="minimumSize">
+             <size>
+              <width>200</width>
+              <height>240</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>260</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">/* 样式由全局样式表控制 */</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="statusPlaceholder" native="true">
+            <property name="minimumSize">
+             <size>
+              <width>200</width>
+              <height>110</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>260</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">/* 样式由全局样式表控制 */</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_2">
+             <property name="spacing">
+              <number>6</number>
+             </property>
+             <property name="leftMargin">
+              <number>8</number>
+             </property>
+             <property name="topMargin">
+              <number>8</number>
+             </property>
+             <property name="rightMargin">
+              <number>8</number>
+             </property>
+             <property name="bottomMargin">
+              <number>8</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="connectionStatusLabel">
+               <property name="text">
+                <string>连接状态: 离线</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="dataCountLabel">
+               <property name="text">
+                <string>数据接收: 0</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lastUpdateLabel">
+               <property name="text">
+                <string>最后更新: --:--:--</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="verticalSpacer">
+               <property name="orientation">
+                <enum>Qt::Vertical</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>10</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="rightContentLayout">
+          <property name="spacing">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QWidget" name="thresholdEditorPlaceholder" native="true">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>90</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">/* 样式由全局样式表控制 */</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="chartWidgetPlaceholder" native="true">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>420</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">/* 样式由全局样式表控制 */</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1200</width>
+     <height>21</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
