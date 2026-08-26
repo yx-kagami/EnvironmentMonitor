@@ -8,6 +8,7 @@ MqttClient::MqttClient(QObject *parent)
     , m_reconnectTimer(new QTimer(this))
     , m_autoReconnect(true)
     , m_reconnectInterval(5000)
+    , m_reconnectDelay(1000)
     , m_port(1883)
 {
     setupConnections();
@@ -170,6 +171,7 @@ void MqttClient::onConnected()
 {
     qDebug() << "Connected to MQTT broker";
     m_reconnectTimer->stop();
+    m_reconnectDelay = 1000;    // 连接成功，退避延迟复位回初值
     emit connected();
 }
 
@@ -179,8 +181,8 @@ void MqttClient::onDisconnected()
     emit disconnected();
 
     if (m_autoReconnect && m_client->state() != QMqttClient::Connecting) {
-        qDebug() << "Will attempt to reconnect in" << m_reconnectInterval << "ms";
-        m_reconnectTimer->start();
+        qDebug() << "Will attempt to reconnect in" << m_reconnectDelay << "ms";
+        m_reconnectTimer->start(m_reconnectDelay);
     }
 }
 
@@ -247,5 +249,12 @@ void MqttClient::attemptReconnect()
 
         qDebug() << "Attempting to reconnect to MQTT broker...";
         m_client->connectToHost();
+
+        // 指数退避：本次尝试后延迟翻倍，封顶60s；
+        // 若连接失败且不再触发 disconnected 信号，这里重新武装定时器兜底
+        m_reconnectDelay = qMin(m_reconnectDelay * 2, 60000);
+        if (m_autoReconnect) {
+            m_reconnectTimer->start(m_reconnectDelay);
+        }
     }
 }
