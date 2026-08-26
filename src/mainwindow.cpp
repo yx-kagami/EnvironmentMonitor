@@ -29,6 +29,8 @@ MainWindow::MainWindow(QWidget *parent)
     , m_statusUpdateTimer(new QTimer(this))
     , m_autoSaveTimer(new QTimer(this))
     , m_settings(new QSettings("SmartEnvironment", "Monitor", this))
+    , m_dataReceivedCount(0)
+    , m_dataSavedCount(0)
     , m_chartWidget(nullptr)
     , m_sensorDisplayWidget(nullptr)
     , m_switchControlWidget(nullptr)
@@ -36,8 +38,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_isConnected(false)
     , m_autoSaveEnabled(true)
     , m_lightTheme(false)
-    , m_dataReceivedCount(0)
-    , m_dataSavedCount(0)
     , m_mqttPort(1883)
 {
     loadSettings();
@@ -420,6 +420,7 @@ void MainWindow::onMqttError(const QString &error)
 
 void MainWindow::onMqttMessageReceived(const QString &topic, const QString &message)
 {
+    Q_UNUSED(topic); // 消息内容自包含，topic 形参仅为匹配信号签名
     m_dataReceivedCount++;
     m_lastDataTime = QDateTime::currentDateTime();
 

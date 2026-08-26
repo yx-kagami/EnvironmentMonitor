@@ -58,5 +58,12 @@ target_link_libraries(EnvironmentMonitor PRIVATE
     Qt6::Sql
 )
 
+# 编译警告：GCC/MinGW 用 -Wall -Wextra，MSVC 用 /W4；target_compile_options 必须在 add_executable 之后调用
+if(MSVC)
+    target_compile_options(EnvironmentMonitor PRIVATE /W4)
+else()
+    target_compile_options(EnvironmentMonitor PRIVATE -Wall -Wextra)
+endif()
+
 install(TARGETS EnvironmentMonitor DESTINATION bin)
 

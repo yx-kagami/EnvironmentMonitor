@@ -147,6 +147,7 @@ void HistoryDialog::setupUI()
 
 void HistoryDialog::onQuickRangeChanged(int index)
 {
+    Q_UNUSED(index); // 区间值从 currentData() 取，index 形参仅为匹配信号签名
     int hours = m_quickRangeCombo->currentData().toInt();
     QDateTime end = QDateTime::currentDateTime();
     QDateTime start;
