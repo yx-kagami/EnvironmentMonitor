@@ -1,6 +1,7 @@
 #include "mqttclient.h"
 #include <QDebug>
 #include <QDateTime>
+#include <QRandomGenerator>
 
 MqttClient::MqttClient(QObject *parent)
     : QObject(parent)
@@ -254,7 +255,9 @@ void MqttClient::attemptReconnect()
         // 若连接失败且不再触发 disconnected 信号，这里重新武装定时器兜底
         m_reconnectDelay = qMin(m_reconnectDelay * 2, 60000);
         if (m_autoReconnect) {
-            m_reconnectTimer->start(m_reconnectDelay);
+            // +0~25% 随机抖动：broker 重启后大量客户端退避节奏一致会撞车（惊群），抖动把重连时刻打散
+            m_reconnectTimer->start(m_reconnectDelay
+                + QRandomGenerator::global()->bounded(m_reconnectDelay / 4 + 1));
         }
     }
 }
