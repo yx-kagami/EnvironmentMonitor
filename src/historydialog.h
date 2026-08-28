@@ -8,6 +8,7 @@
 #include <QStandardItemModel>
 #include <QLabel>
 #include <QComboBox>
+#include <QSpinBox>
 #include "databasemanager.h"
 
 class HistoryDialog : public QDialog
@@ -25,11 +26,17 @@ private slots:
     void onQueryClicked();
     void onExportClicked();
     void onQuickRangeChanged(int index);
-    void updateStatistics(const QList<SensorData> &data);
+    void onPrevPage();
+    void onNextPage();
+    void onPageJumped(int page);
 
 private:
     void setupUI();
     void loadData(const QDateTime &start, const QDateTime &end);
+    void updateStatistics(const SensorStatistics &stats);
+    void updatePageControls();
+
+    static constexpr int kPageSize = 50;  // 每页条数：配合 SQL LIMIT/OFFSET 分页
 
     DatabaseManager *m_databaseManager;
 
@@ -42,6 +49,12 @@ private:
     QStandardItemModel *m_tableModel;
     QLabel *m_statisticsLabel;
     QLabel *m_countLabel;
+    QPushButton *m_prevPageButton;
+    QPushButton *m_nextPageButton;
+    QLabel *m_pageLabel;
+    QSpinBox *m_pageSpinBox;   // 页码跳转输入框：范围 1..总页数
+    int m_currentPage = 0;
+    int m_totalCount = 0;
 };
 
 #endif // HISTORYDIALOG_H

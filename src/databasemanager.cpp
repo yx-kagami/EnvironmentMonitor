@@ -238,7 +238,7 @@ bool DatabaseManager::saveSensorData(const SensorData &data)
         return false;
     }
 
-    qDebug() << "Sensor data saved:" << data.timestamp.toString();
+    qInfo() << "Sensor data saved:" << data.timestamp.toString();
     emit dataSaved(1);
     return true;
 }
@@ -282,7 +282,8 @@ int DatabaseManager::saveSensorDataBatch(const QList<SensorData> &dataList)
     return savedCount;
 }
 
-QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, const QDateTime &end)
+QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, const QDateTime &end,
+                                                     int limit, int offset)
 {
     QList<SensorData> result;
 
@@ -291,15 +292,24 @@ QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, con
         return result;
     }
 
-    QSqlQuery query(m_database);
-    query.prepare(
+    QString sql =
         "SELECT * FROM sensor_history "
         "WHERE timestamp BETWEEN :start AND :end "
-        "ORDER BY timestamp ASC"
-    );
+        "ORDER BY timestamp ASC";
+    if (limit > 0) {
+        // 分页：timestamp 索引保证 ORDER BY + LIMIT/OFFSET 走索引，小数据量下代价可忽略
+        sql += " LIMIT :limit OFFSET :offset";
+    }
+
+    QSqlQuery query(m_database);
+    query.prepare(sql);
 
     query.bindValue(":start", start);
     query.bindValue(":end", end);
+    if (limit > 0) {
+        query.bindValue(":limit", limit);
+        query.bindValue(":offset", offset);
+    }
 
     if (!query.exec()) {
         m_lastError = query.lastError().text();
@@ -313,8 +323,53 @@ QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, con
             result.append(data);
         }
     }
-    qDebug() << "Retrieved" << result.size() << "historical data records";
+    qInfo() << "Retrieved" << result.size() << "historical data records";
     return result;
+}
+
+SensorStatistics DatabaseManager::getStatistics(const QDateTime &start, const QDateTime &end)
+{
+    SensorStatistics stats;
+
+    if (!m_database.isOpen()) {
+        m_lastError = "Database is not open";
+        stats.count = -1;
+        return stats;
+    }
+
+    // 聚合全部下推到 SQLite 执行：只回传 1 行 10 列，不随时间段数据量膨胀
+    QSqlQuery query(m_database);
+    query.prepare(
+        "SELECT COUNT(*), "
+        "AVG(temperature), MAX(temperature), MIN(temperature), "
+        "AVG(humidity), MAX(humidity), MIN(humidity), "
+        "AVG(light_intensity), MAX(light_intensity), MIN(light_intensity) "
+        "FROM sensor_history "
+        "WHERE timestamp BETWEEN :start AND :end"
+    );
+    query.bindValue(":start", start);
+    query.bindValue(":end", end);
+
+    if (!query.exec() || !query.next()) {
+        m_lastError = query.lastError().text();
+        qWarning() << "Failed to query statistics:" << m_lastError;
+        stats.count = -1;
+        return stats;
+    }
+
+    stats.count = query.value(0).toInt();
+    if (stats.count > 0) {
+        stats.tempAvg = query.value(1).toDouble();
+        stats.tempMax = query.value(2).toDouble();
+        stats.tempMin = query.value(3).toDouble();
+        stats.humAvg = query.value(4).toDouble();
+        stats.humMax = query.value(5).toDouble();
+        stats.humMin = query.value(6).toDouble();
+        stats.lightAvg = query.value(7).toDouble();
+        stats.lightMax = query.value(8).toDouble();
+        stats.lightMin = query.value(9).toDouble();
+    }
+    return stats;
 }
 
 int DatabaseManager::clearOldData(int daysToKeep)
@@ -379,7 +434,8 @@ QString DatabaseManager::getDatabaseInfo() const
     QFileInfo fileInfo(m_databasePath);
     if (fileInfo.exists()) {
         double sizeMB = fileInfo.size() / (1024.0 * 1024.0);
-        info.append(QString("File size: %.2f MB").arg(sizeMB));
+        // arg() 不认 printf 风格的 %.2f；浮点格式化要用 arg(值, 域宽, 进制, 精度)
+        info.append(QString("File size: %1 MB").arg(sizeMB, 0, 'f', 2));
     }
 
     return info.join(" | ");

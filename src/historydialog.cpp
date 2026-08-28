@@ -51,6 +51,10 @@ HistoryDialog::HistoryDialog(DatabaseManager *dbManager, QWidget *parent)
     , m_tableModel(nullptr)
     , m_statisticsLabel(nullptr)
     , m_countLabel(nullptr)
+    , m_prevPageButton(nullptr)
+    , m_nextPageButton(nullptr)
+    , m_pageLabel(nullptr)
+    , m_pageSpinBox(nullptr)
 {
     setWindowTitle(tr("历史数据查询与分析"));
     resize(900, 600);
@@ -116,13 +120,36 @@ void HistoryDialog::setupUI()
 
     mainLayout->addWidget(queryGroup);
 
-    // 数据统计区域
+    // 统计与分页同一行：左边条数/统计，右边分页控件，避免独占一行挤占表格高度
     QHBoxLayout *statLayout = new QHBoxLayout();
     m_countLabel = new QLabel(tr("数据条数: 0"), this);
     m_statisticsLabel = new QLabel(tr("统计信息: -"), this);
     m_statisticsLabel->setWordWrap(true);
+
+    m_prevPageButton = new QPushButton(tr("上一页"), this);
+    m_prevPageButton->setProperty("class", "thresholdButton");
+    m_prevPageButton->setFixedHeight(26);
+    connect(m_prevPageButton, &QPushButton::clicked, this, &HistoryDialog::onPrevPage);
+    m_pageSpinBox = new QSpinBox(this);   // 页码跳转：宽度自适应内容，3 位数也能看全
+    m_pageSpinBox->setRange(0, 0);
+    // 最小宽度按 4 位数字 + 上下按钮预留，页数到 9999 也不截断
+    m_pageSpinBox->setMinimumWidth(
+        m_pageSpinBox->fontMetrics().horizontalAdvance(QStringLiteral("9999")) + 32);
+    connect(m_pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &HistoryDialog::onPageJumped);
+    m_pageLabel = new QLabel(tr("/ 0 页"), this);
+    m_pageLabel->setAlignment(Qt::AlignCenter);
+    m_nextPageButton = new QPushButton(tr("下一页"), this);
+    m_nextPageButton->setProperty("class", "thresholdButton");
+    m_nextPageButton->setFixedHeight(26);
+    connect(m_nextPageButton, &QPushButton::clicked, this, &HistoryDialog::onNextPage);
+
     statLayout->addWidget(m_countLabel);
     statLayout->addWidget(m_statisticsLabel, 1);
+    statLayout->addWidget(m_prevPageButton);
+    statLayout->addWidget(m_pageSpinBox);
+    statLayout->addWidget(m_pageLabel);
+    statLayout->addWidget(m_nextPageButton);
     mainLayout->addLayout(statLayout);
 
     // 数据表格
@@ -172,7 +199,24 @@ void HistoryDialog::onQueryClicked()
         return;
     }
 
+    m_currentPage = 0;   // 新查询总是从第一页开始
     loadData(start, end);
+}
+
+void HistoryDialog::onPrevPage()
+{
+    if (m_currentPage > 0) {
+        --m_currentPage;
+        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime());
+    }
+}
+
+void HistoryDialog::onNextPage()
+{
+    if ((m_currentPage + 1) * kPageSize < m_totalCount) {
+        ++m_currentPage;
+        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime());
+    }
 }
 
 void HistoryDialog::loadData(const QDateTime &start, const QDateTime &end)
@@ -184,14 +228,22 @@ void HistoryDialog::loadData(const QDateTime &start, const QDateTime &end)
         return;
     }
 
-    QList<SensorData> dataList = m_databaseManager->getHistoricalData(start, end);
+    // 统计先行：一条聚合 SQL 同时拿到总数和全时段 AVG/MAX/MIN
+    //（统计覆盖整个时间段，不随翻页变化，避免“当前页的统计”误导）
+    SensorStatistics stats = m_databaseManager->getStatistics(start, end);
+    m_totalCount = qMax(0, stats.count);
 
-    m_countLabel->setText(tr("数据条数: %1").arg(dataList.size()));
-
-    if (dataList.isEmpty()) {
-        m_statisticsLabel->setText(tr("统计信息: 该时间段内无数据"));
-        return;
+    // 页码钳制：数据被清理或时间段变化时，当前页可能已越界
+    const int totalPages = (m_totalCount + kPageSize - 1) / kPageSize;
+    if (m_currentPage >= totalPages) {
+        m_currentPage = qMax(0, totalPages - 1);
     }
+
+    // 表格只取当前页：LIMIT/OFFSET 在 SQL 侧裁剪，不全量加载进内存
+    QList<SensorData> dataList = m_databaseManager->getHistoricalData(
+        start, end, kPageSize, m_currentPage * kPageSize);
+
+    m_countLabel->setText(tr("数据条数: %1").arg(m_totalCount));
 
     for (const SensorData &data : dataList) {
         QList<QStandardItem *> rowItems;
@@ -219,50 +271,57 @@ void HistoryDialog::loadData(const QDateTime &start, const QDateTime &end)
         m_tableModel->appendRow(rowItems);
     }
 
-    updateStatistics(dataList);
+    updateStatistics(stats);
+    updatePageControls();
 
     // 自动调整列宽
     m_tableView->resizeColumnsToContents();
 }
 
-void HistoryDialog::updateStatistics(const QList<SensorData> &data)
+void HistoryDialog::onPageJumped(int page)
 {
-    if (data.isEmpty()) {
-        m_statisticsLabel->setText(tr("统计信息: -"));
+    // updatePageControls 里 setValue 会递归触发本槽：那边已用 QSignalBlocker 挡住，
+    // 这里只需处理用户真实输入
+    const int totalPages = (m_totalCount + kPageSize - 1) / kPageSize;
+    if (totalPages <= 0) return;
+    const int target = qBound(1, page, totalPages) - 1;
+    if (target == m_currentPage) return;
+    m_currentPage = target;
+    loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime());
+}
+
+void HistoryDialog::updatePageControls()
+{
+    const int totalPages = (m_totalCount + kPageSize - 1) / kPageSize;
+    m_pageLabel->setText(tr("/ %1 页").arg(totalPages));
+    {
+        const QSignalBlocker blocker(m_pageSpinBox);
+        m_pageSpinBox->setRange(totalPages == 0 ? 0 : 1, totalPages);
+        m_pageSpinBox->setValue(totalPages == 0 ? 0 : m_currentPage + 1);
+    }
+    m_prevPageButton->setEnabled(m_currentPage > 0);
+    m_nextPageButton->setEnabled(m_currentPage + 1 < totalPages);
+}
+
+void HistoryDialog::updateStatistics(const SensorStatistics &stats)
+{
+    if (stats.count <= 0) {
+        m_statisticsLabel->setText(tr("统计信息: 该时间段内无数据"));
         return;
     }
 
-    double tempSum = 0, humSum = 0, lightSum = 0;
-    double tempMax = data.first().temperature, tempMin = data.first().temperature;
-    double humMax = data.first().humidity, humMin = data.first().humidity;
-    double lightMax = data.first().lightIntensity, lightMin = data.first().lightIntensity;
+    QString text = tr("温度: 平均 %1°C (最高 %2°C / 最低 %3°C) | 湿度: 平均 %4% (最高 %5% / 最低 %6%) | 光照: 平均 %7 Lux (最高 %8 Lux / 最低 %9 Lux)")
+        .arg(stats.tempAvg, 0, 'f', 1)
+        .arg(stats.tempMax, 0, 'f', 1)
+        .arg(stats.tempMin, 0, 'f', 1)
+        .arg(stats.humAvg, 0, 'f', 1)
+        .arg(stats.humMax, 0, 'f', 1)
+        .arg(stats.humMin, 0, 'f', 1)
+        .arg(stats.lightAvg, 0, 'f', 0)
+        .arg(stats.lightMax, 0, 'f', 0)
+        .arg(stats.lightMin, 0, 'f', 0);
 
-    for (const SensorData &d : data) {
-        tempSum += d.temperature;
-        humSum += d.humidity;
-        lightSum += d.lightIntensity;
-
-        if (d.temperature > tempMax) tempMax = d.temperature;
-        if (d.temperature < tempMin) tempMin = d.temperature;
-        if (d.humidity > humMax) humMax = d.humidity;
-        if (d.humidity < humMin) humMin = d.humidity;
-        if (d.lightIntensity > lightMax) lightMax = d.lightIntensity;
-        if (d.lightIntensity < lightMin) lightMin = d.lightIntensity;
-    }
-
-    int count = data.size();
-    QString stats = tr("温度: 平均 %1°C (最高 %2°C / 最低 %3°C) | 湿度: 平均 %4% (最高 %5% / 最低 %6%) | 光照: 平均 %7 Lux (最高 %8 Lux / 最低 %9 Lux)")
-        .arg(tempSum / count, 0, 'f', 1)
-        .arg(tempMax, 0, 'f', 1)
-        .arg(tempMin, 0, 'f', 1)
-        .arg(humSum / count, 0, 'f', 1)
-        .arg(humMax, 0, 'f', 1)
-        .arg(humMin, 0, 'f', 1)
-        .arg(lightSum / count, 0, 'f', 0)
-        .arg(lightMax, 0, 'f', 0)
-        .arg(lightMin, 0, 'f', 0);
-
-    m_statisticsLabel->setText(stats);
+    m_statisticsLabel->setText(text);
 }
 
 void HistoryDialog::onExportClicked()
