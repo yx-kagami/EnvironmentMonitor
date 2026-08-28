@@ -65,5 +65,20 @@ else()
     target_compile_options(EnvironmentMonitor PRIVATE -Wall -Wextra)
 endif()
 
+# Windows 崩溃转储依赖 DbgHelp（MiniDumpWriteDump）；MinGW/MSVC 均带此导入库
+if(WIN32)
+    target_link_libraries(EnvironmentMonitor PRIVATE dbghelp)
+endif()
+
 install(TARGETS EnvironmentMonitor DESTINATION bin)
+
+# ===== 单元测试（QTest）=====
+# DataParser 是网络边界纯函数，优先覆盖；构建：--target test_dataparser；运行：ctest --output-on-failure
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    add_executable(test_dataparser tests/test_dataparser.cpp src/sensordata.cpp src/sensordata.h)
+    target_link_libraries(test_dataparser PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME DataParser COMMAND test_dataparser)
+endif()
 
