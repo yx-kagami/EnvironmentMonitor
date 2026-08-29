@@ -91,9 +91,9 @@ bool MqttClient::subscribe(const QString &topic, quint8 qos)
         return false;
     }
 
-    qDebug() << "=== DEBUG: MqttClient::subscribe() ===";
-    qDebug() << "Topic:" << topic;
-    qDebug() << "Requested QoS:" << qos;
+    qInfo() << "=== DEBUG: MqttClient::subscribe() ===";
+    qInfo() << "Topic:" << topic;
+    qInfo() << "Requested QoS:" << qos;
 
     auto subscription = m_client->subscribe(topic, qos);
     if (!subscription) {
@@ -101,8 +101,8 @@ bool MqttClient::subscribe(const QString &topic, quint8 qos)
         return false;
     }
 
-    qDebug() << "Subscribed successfully to topic:" << topic;
-    qDebug() << "Actual QoS:" << qos;
+    qInfo() << "Subscribed successfully to topic:" << topic;
+    qInfo() << "Actual QoS:" << qos;
     return true;
 }
 
@@ -133,7 +133,7 @@ bool MqttClient::publish(const QString &topic, const QString &message,
         return false;
     }
 
-    qDebug() << "Published successfully, message ID:" << messageId;
+    qInfo() << "Published successfully, message ID:" << messageId;
     return true;
 }
 
@@ -238,7 +238,7 @@ void MqttClient::onErrorChanged(QMqttClient::ClientError error)
 void MqttClient::onMessageReceived(const QByteArray &message, const QMqttTopicName &topic)
 {
     QString msgString = QString::fromUtf8(message);
-    qDebug() << "Received message from topic:" << topic.name() << "Size:" << message.size();
+    qInfo() << "Received message from topic:" << topic.name() << "Size:" << message.size();
 
     emit messageReceived(topic.name(), msgString);
 }

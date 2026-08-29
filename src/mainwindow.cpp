@@ -46,6 +46,7 @@ MainWindow::MainWindow(QWidget *parent)
                      || m_mqttUsername.isEmpty();
     if (needLogin) {
         LoginDialog dialog(this);
+        dialog.setSaveSettings(m_rememberMqttSettings);  // 回显上次“记住设置”的选择，而不是每次强制勾选
         dialog.loadSavedSettings();
 
         if (dialog.exec() == QDialog::Accepted) {
@@ -53,8 +54,9 @@ MainWindow::MainWindow(QWidget *parent)
             m_publishTopic = dialog.publishTopic();
             m_mqttUsername = dialog.username();
             m_mqttPassword = dialog.password();
+            m_rememberMqttSettings = dialog.saveSettings();
 
-            if (dialog.saveSettings()) {
+            if (m_rememberMqttSettings) {
                 m_settings->setValue("mqtt/subscribe_topic", m_subscribeTopic);
                 m_settings->setValue("mqtt/publish_topic", m_publishTopic);
                 m_settings->setValue("mqtt/username", m_mqttUsername);
@@ -414,8 +416,18 @@ void MainWindow::onMqttDisconnected()
 
 void MainWindow::onMqttError(const QString &error)
 {
-    QMessageBox::warning(this, tr("MQTT错误"), error);
-    statusBar()->showMessage(tr("MQTT错误：%1").arg(error), 5000);
+    // 凭证类错误重连无意义：停掉自动重连并引导检查设置（否则退避循环会反复弹窗）
+    if (error.contains(QStringLiteral("username"), Qt::CaseInsensitive) ||
+        error.contains(QStringLiteral("authorized"), Qt::CaseInsensitive)) {
+        m_mqttClient->setAutoReconnect(false);
+        QMessageBox::warning(this, tr("认证失败"),
+                             tr("MQTT用户名或密码错误，请在“设置”中检查连接参数。"));
+        statusBar()->showMessage(tr("MQTT认证失败，已停止自动重连"), 5000);
+        return;
+    }
+    // 非凭证错误（断网等）：模态弹窗会挡住用户、让人以为卡死；改为日志+状态栏提示，自动重连在后台继续
+    qWarning() << "MQTT错误（自动重连中）:" << error;
+    statusBar()->showMessage(tr("MQTT连接异常：%1（自动重连中）").arg(error), 5000);
 }
 
 void MainWindow::onMqttMessageReceived(const QString &topic, const QString &message)
@@ -468,26 +480,23 @@ void MainWindow::onSettingsClicked()
     LoginDialog dialog(this);
     dialog.setMandatory(false);   // 设置菜单打开：关闭即取消，不触发退出确认
     dialog.loadSavedSettings();
-    dialog.setSaveSettings(true);
+    dialog.setSaveSettings(m_rememberMqttSettings);  // 回显上次选择，而非强制勾选
 
     if (dialog.exec() == QDialog::Accepted) {
         QString newSubscribe = dialog.subscribeTopic();
         QString newPublish = dialog.publishTopic();
+        m_rememberMqttSettings = dialog.saveSettings();
 
-        // 凭据总是随确定保存（主题未变也可能只改账号密码）
+        // 凭据当次生效；是否落盘取决于“记住设置”勾选（LoginDialog 已按勾选写/清 INI）
         m_mqttUsername = dialog.username();
         m_mqttPassword = dialog.password();
-        m_settings->setValue("mqtt/username", m_mqttUsername);
-        m_settings->setValue("mqtt/password", m_mqttPassword);
 
         if (newSubscribe != m_subscribeTopic || newPublish != m_publishTopic) {
             const QString oldSubscribe = m_subscribeTopic;
             m_subscribeTopic = newSubscribe;
             m_publishTopic = newPublish;
 
-            m_settings->setValue("mqtt/subscribe_topic", m_subscribeTopic);
-            m_settings->setValue("mqtt/publish_topic", m_publishTopic);
-            m_settings->sync();
+            // 主题落盘与否同样由 LoginDialog 按勾选处理，这里不再重复写 INI
 
             if (m_mqttClient && m_mqttClient->isConnected()) {
                 // 先退订旧主题：否则旧主题的数据会继续进入消息槽，两个主题的数据混库
@@ -595,7 +604,7 @@ void MainWindow::autoSaveData()
         if (saved > 0) {
             m_dataSavedCount += saved;
             m_pendingSave.clear();
-            qDebug() << "Auto-saved" << saved << "data records";
+            qInfo() << "Auto-saved" << saved << "data records";
         }
     }
 }
@@ -640,11 +649,11 @@ void MainWindow::onThresholdModeChanged(bool enabled)
 void MainWindow::onModeChanged(bool manualMode)
 {
     QString command = DataParser::createModeCommand(manualMode);
-    qDebug() << "Generated command:" << command << "Length:" << command.length();
+    qInfo() << "Generated command:" << command << "Length:" << command.length();
 
     if (!command.isEmpty() && m_mqttClient && m_mqttClient->isConnected()) {
         if (!m_publishTopic.isEmpty()) {
-            qDebug() << "Publishing to topic:" << m_publishTopic << "QoS: 0";
+            qInfo() << "Publishing to topic:" << m_publishTopic << "QoS: 0";
             m_mqttClient->publish(m_publishTopic, command, 0, false);
             qDebug() << "Sent mode command:" << command;
         }
@@ -697,16 +706,26 @@ void MainWindow::loadSettings()
     m_publishTopic = m_settings->value("mqtt/publish_topic", "").toString();
     m_autoSaveEnabled = m_settings->value("data/auto_save", true).toBool();
     m_lightTheme = m_settings->value("ui/light_theme", false).toBool();
+    m_rememberMqttSettings = m_settings->value("mqtt/remember", true).toBool();
 }
 
 void MainWindow::saveSettings()
 {
     m_settings->setValue("mqtt/host", m_mqttHost);
     m_settings->setValue("mqtt/port", m_mqttPort);
-    m_settings->setValue("mqtt/username", m_mqttUsername);
-    m_settings->setValue("mqtt/password", m_mqttPassword);
-    m_settings->setValue("mqtt/subscribe_topic", m_subscribeTopic);
-    m_settings->setValue("mqtt/publish_topic", m_publishTopic);
+    // “记住主题设置”未勾选时：只记勾选状态本身，MQTT 参数不落盘并清除旧值
+    m_settings->setValue("mqtt/remember", m_rememberMqttSettings);
+    if (m_rememberMqttSettings) {
+        m_settings->setValue("mqtt/username", m_mqttUsername);
+        m_settings->setValue("mqtt/password", m_mqttPassword);
+        m_settings->setValue("mqtt/subscribe_topic", m_subscribeTopic);
+        m_settings->setValue("mqtt/publish_topic", m_publishTopic);
+    } else {
+        m_settings->remove("mqtt/username");
+        m_settings->remove("mqtt/password");
+        m_settings->remove("mqtt/subscribe_topic");
+        m_settings->remove("mqtt/publish_topic");
+    }
     m_settings->setValue("data/auto_save", m_autoSaveEnabled);
     m_settings->setValue("ui/light_theme", m_lightTheme);
 }

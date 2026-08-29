@@ -46,7 +46,7 @@ static void writeCrashDump(EXCEPTION_POINTERS *ep)
     if (slash) *slash = L'\0';                       // 截掉文件名，留目录
 
     wchar_t dumpPath[MAX_PATH];
-    wsprintfW(dumpPath, L"%s\\crash.dmp", exeDir);   // 固定文件名（演示够用；生产可加时间戳）
+    wsprintfW(dumpPath, L"%s\\crash.dmp", exeDir);   // 固定文件名（生产可加时间戳）
 
     HANDLE hFile = CreateFileW(dumpPath, GENERIC_WRITE, 0, nullptr,
                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);

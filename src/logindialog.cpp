@@ -257,12 +257,18 @@ void LoginDialog::onOkClicked()
         return;
     }
 
-    // 保存设置（如果用户选择）
+    // 保存设置（如果用户选择）；取消勾选时清除已存旧值，否则下次启动仍会回填
     if (m_saveSettingsFlag) {
         m_settings->setValue("mqtt/subscribe_topic", subscribe);
         m_settings->setValue("mqtt/publish_topic", publish);
         m_settings->setValue("mqtt/username", username());
         m_settings->setValue("mqtt/password", password());
+        m_settings->sync();
+    } else {
+        m_settings->remove("mqtt/subscribe_topic");
+        m_settings->remove("mqtt/publish_topic");
+        m_settings->remove("mqtt/username");
+        m_settings->remove("mqtt/password");
         m_settings->sync();
     }
 

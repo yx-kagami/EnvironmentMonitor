@@ -125,6 +125,7 @@ private:
     bool m_isConnected;
     bool m_autoSaveEnabled;
     bool m_lightTheme;
+    bool m_rememberMqttSettings = true;  // 对应登录框“记住主题设置”：false 时退出不落盘 MQTT 参数
     QDateTime m_lastDataTime;
 
     // 配置
