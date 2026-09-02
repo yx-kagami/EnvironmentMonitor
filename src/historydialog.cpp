@@ -9,26 +9,39 @@
 #include <QTextStream>
 #include <QHeaderView>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QThreadPool>
 
-// CSV 导出任务：把纯文件 I/O 放到线程池执行，结果通过信号排队送回 GUI 线程
+// CSV 导出任务：全量查询 + 纯文件 I/O 都放到线程池执行，结果通过信号排队送回 GUI 线程
 //（QObject + QRunnable 双继承模式）
 class CsvExportTask : public QObject, public QRunnable
 {
     Q_OBJECT
 
 public:
-    CsvExportTask(QString filePath, QList<SensorData> dataList)
+    CsvExportTask(QString filePath, QDateTime start, QDateTime end)
         : m_filePath(std::move(filePath))
-        , m_dataList(std::move(dataList))
+        , m_start(std::move(start))
+        , m_end(std::move(end))
     {
         setAutoDelete(false);   // 生命周期显式管理：finished 投递完后 deleteLater
     }
 
     void run() override
     {
-        const bool ok = HistoryDialog::exportToCsv(m_filePath, m_dataList);
-        emit finished(ok, m_filePath, static_cast<int>(m_dataList.size()));
+        // QSqlDatabase 不能跨线程用，连接在使用它的线程里现建
+        QSqlDatabase db = DatabaseManager::openThreadConnection();
+        if (!db.isOpen()) {
+            emit finished(false, m_filePath, 0);
+            return;
+        }
+        QElapsedTimer queryTimer;
+        queryTimer.start();
+        QList<SensorData> dataList = DatabaseManager::getHistoricalData(db, m_start, m_end);
+        qInfo() << "export query took" << queryTimer.elapsed() << "ms,"
+                << dataList.size() << "rows";
+        const bool ok = HistoryDialog::exportToCsv(m_filePath, dataList);
+        emit finished(ok, m_filePath, static_cast<int>(dataList.size()));
     }
 
 signals:
@@ -36,7 +49,52 @@ signals:
 
 private:
     QString m_filePath;
-    QList<SensorData> m_dataList;
+    QDateTime m_start;
+    QDateTime m_end;
+};
+
+// 历史查询任务：统计+分页查询放线程池（同 CsvExportTask 模式），finished 回 GUI 填表
+class HistoryQueryTask : public QObject, public QRunnable
+{
+    Q_OBJECT
+
+public:
+    HistoryQueryTask(QDateTime start, QDateTime end, int limit, int offset)
+        : m_start(std::move(start))
+        , m_end(std::move(end))
+        , m_limit(limit)
+        , m_offset(offset)
+    {
+        setAutoDelete(false);   // 生命周期显式管理：finished 投递完后 deleteLater
+    }
+
+    void run() override
+    {
+        QElapsedTimer queryTimer;
+        queryTimer.start();
+        QSqlDatabase db = DatabaseManager::openThreadConnection();
+        if (!db.isOpen()) {
+            emit finished(false, {}, SensorStatistics{});
+            return;
+        }
+        // 统计先行（覆盖全时段），再 LIMIT/OFFSET 取当前页
+        SensorStatistics stats = DatabaseManager::getStatistics(db, m_start, m_end);
+        QList<SensorData> pageData =
+            DatabaseManager::getHistoricalData(db, m_start, m_end, m_limit, m_offset);
+        qInfo() << "page query took" << queryTimer.elapsed() << "ms,"
+                << pageData.size() << "rows";
+        emit finished(stats.count >= 0, pageData, stats);
+    }
+
+signals:
+    void finished(bool success, const QList<SensorData> &pageData,
+                  const SensorStatistics &stats);
+
+private:
+    QDateTime m_start;
+    QDateTime m_end;
+    int m_limit;
+    int m_offset;
 };
 
 HistoryDialog::HistoryDialog(DatabaseManager *dbManager, QWidget *parent)
@@ -221,27 +279,48 @@ void HistoryDialog::onNextPage()
 
 void HistoryDialog::loadData(const QDateTime &start, const QDateTime &end)
 {
-    m_tableModel->removeRows(0, m_tableModel->rowCount());
-
     if (!m_databaseManager || !m_databaseManager->isOpen()) {
         QMessageBox::warning(this, tr("数据库错误"), tr("数据库未打开或不可用"));
         return;
     }
 
-    // 统计先行：一条聚合 SQL 同时拿到总数和全时段 AVG/MAX/MIN
-    //（统计覆盖整个时间段，不随翻页变化，避免“当前页的统计”误导）
-    SensorStatistics stats = m_databaseManager->getStatistics(start, end);
-    m_totalCount = qMax(0, stats.count);
+    // 查询在途防重入；旧数据留在表格里，结果回来一次性替换，避免闪烁
+    m_queryInFlight = true;
+    updateInputEnabled();
 
-    // 页码钳制：数据被清理或时间段变化时，当前页可能已越界
-    const int totalPages = (m_totalCount + kPageSize - 1) / kPageSize;
-    if (m_currentPage >= totalPages) {
-        m_currentPage = qMax(0, totalPages - 1);
+    auto *task = new HistoryQueryTask(start, end, kPageSize, m_currentPage * kPageSize);
+    connect(task, &HistoryQueryTask::finished, this,
+            &HistoryDialog::onQueryFinished, Qt::QueuedConnection);
+    // 对话框提前关闭时任务对象也能自行回收
+    connect(task, &HistoryQueryTask::finished, task, &QObject::deleteLater, Qt::QueuedConnection);
+    QThreadPool::globalInstance()->start(task);
+}
+
+void HistoryDialog::onQueryFinished(bool success, const QList<SensorData> &dataList,
+                                    const SensorStatistics &stats)
+{
+    m_queryInFlight = false;
+    updateInputEnabled();
+
+    if (!success) {
+        QMessageBox::warning(this, tr("数据库错误"), tr("历史数据查询失败，详见日志"));
+        return;
     }
 
-    // 表格只取当前页：LIMIT/OFFSET 在 SQL 侧裁剪，不全量加载进内存
-    QList<SensorData> dataList = m_databaseManager->getHistoricalData(
-        start, end, kPageSize, m_currentPage * kPageSize);
+    m_tableModel->removeRows(0, m_tableModel->rowCount());
+
+    // 统计覆盖整个时间段，不随翻页变化，避免“当前页的统计”误导
+    m_totalCount = qMax(0, stats.count);
+
+    // 异步后总数要查完才知道，页码只能事后钳制；
+    // 被压小时按钳制页补查一次（钳制页必然合法，不会循环）
+    const int totalPages = (m_totalCount + kPageSize - 1) / kPageSize;
+    const int clampedPage = qMin(m_currentPage, qMax(0, totalPages - 1));
+    if (clampedPage != m_currentPage) {
+        m_currentPage = clampedPage;
+        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime());
+        return;
+    }
 
     m_countLabel->setText(tr("数据条数: %1").arg(m_totalCount));
 
@@ -276,6 +355,22 @@ void HistoryDialog::loadData(const QDateTime &start, const QDateTime &end)
 
     // 自动调整列宽
     m_tableView->resizeColumnsToContents();
+}
+
+void HistoryDialog::updateInputEnabled()
+{
+    // 查询或导出任一在途即视为忙：查询/翻页/页码跳转/导出入口全部禁用
+    const bool busy = m_queryInFlight || m_exportInFlight;
+    m_queryButton->setEnabled(!busy);
+    m_exportButton->setEnabled(!busy);
+    m_pageSpinBox->setEnabled(!busy);
+    if (busy) {
+        // 翻页按钮使能态平时由 updatePageControls 按页码维护，忙时一律压成禁用
+        m_prevPageButton->setEnabled(false);
+        m_nextPageButton->setEnabled(false);
+    } else {
+        updatePageControls();
+    }
 }
 
 void HistoryDialog::onPageJumped(int page)
@@ -341,15 +436,19 @@ void HistoryDialog::onExportClicked()
 
     QDateTime start = m_startTimeEdit->dateTime();
     QDateTime end = m_endTimeEdit->dateTime();
-    QList<SensorData> dataList = m_databaseManager->getHistoricalData(start, end);
+    QElapsedTimer perfTimer;
+    perfTimer.start();
 
-    // 写出文件放到线程池，避免数据量大时阻塞界面
-    m_exportButton->setEnabled(false);
+    // 全量查询+写文件都进线程池，总耗时（查询+写盘）在 finished 回调里打点
+    m_exportInFlight = true;
+    updateInputEnabled();
 
-    auto *task = new CsvExportTask(fileName, dataList);
+    auto *task = new CsvExportTask(fileName, start, end);
     connect(task, &CsvExportTask::finished, this,
-            [this](bool success, const QString &filePath, int rowCount) {
-        m_exportButton->setEnabled(true);
+            [this, perfTimer](bool success, const QString &filePath, int rowCount) {
+        qInfo() << "export total took" << perfTimer.elapsed() << "ms";
+        m_exportInFlight = false;
+        updateInputEnabled();
         if (success) {
             QMessageBox::information(this, tr("导出成功"),
                 tr("已成功导出 %1 条数据到:\n%2").arg(rowCount).arg(filePath));

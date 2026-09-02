@@ -29,12 +29,17 @@ private slots:
     void onPrevPage();
     void onNextPage();
     void onPageJumped(int page);
+    // 工作线程查询完成槽（finished 经显式 QueuedConnection 回本线程）
+    void onQueryFinished(bool success, const QList<SensorData> &dataList,
+                         const SensorStatistics &stats);
 
 private:
     void setupUI();
     void loadData(const QDateTime &start, const QDateTime &end);
     void updateStatistics(const SensorStatistics &stats);
     void updatePageControls();
+    // 在途状态统一收口：查询/导出任一在途时禁用查询、翻页、导出入口，完成后恢复
+    void updateInputEnabled();
 
     static constexpr int kPageSize = 50;  // 每页条数：配合 SQL LIMIT/OFFSET 分页
 
@@ -55,6 +60,8 @@ private:
     QSpinBox *m_pageSpinBox;   // 页码跳转输入框：范围 1..总页数
     int m_currentPage = 0;
     int m_totalCount = 0;
+    bool m_queryInFlight = false;   // HistoryQueryTask（统计+分页查询）是否在途
+    bool m_exportInFlight = false;  // CsvExportTask（全量查询+写文件）是否在途
 };
 
 #endif // HISTORYDIALOG_H

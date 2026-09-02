@@ -5,6 +5,9 @@
 #include <QFileInfo>
 #include <QCoreApplication>
 #include <QStandardPaths>
+#include <QThread>
+
+QString DatabaseManager::s_databasePath;
 
 DatabaseManager::DatabaseManager(QObject *parent)
     : QObject(parent)
@@ -36,6 +39,9 @@ bool DatabaseManager::initializeDatabase(const QString &dbPath)
     } else {
         m_databasePath = dbPath;
     }
+
+    // 同步静态副本：供 openThreadConnection() 在工作线程里打开同一库文件
+    s_databasePath = m_databasePath;
 
     m_database.setDatabaseName(m_databasePath);
 
@@ -282,13 +288,58 @@ int DatabaseManager::saveSensorDataBatch(const QList<SensorData> &dataList)
     return savedCount;
 }
 
+QSqlDatabase DatabaseManager::openThreadConnection()
+{
+    // 连接名按线程 ID 区分（QSqlDatabase 不能跨线程用），同线程复用已有连接
+    const QString connectionName =
+        QStringLiteral("sensor_data_connection_worker_%1")
+            .arg(reinterpret_cast<quintptr>(QThread::currentThreadId()));
+
+    QSqlDatabase db;
+    if (QSqlDatabase::contains(connectionName)) {
+        db = QSqlDatabase::database(connectionName);
+        if (db.isOpen()) {
+            return db;
+        }
+    } else {
+        db = QSqlDatabase::addDatabase("QSQLITE", connectionName);
+        db.setDatabaseName(s_databasePath);
+    }
+
+    if (!db.open()) {
+        qWarning() << "Failed to open worker database connection:"
+                   << db.lastError().text();
+        return db;
+    }
+
+    // busy_timeout：GUI 攒批写入持锁时，读侧等待重试而不是直接吃 SQLITE_BUSY
+    QSqlQuery pragmaQuery(db);
+    if (!pragmaQuery.exec(QStringLiteral("PRAGMA busy_timeout = 3000"))) {
+        qWarning() << "Failed to set busy_timeout on worker connection:"
+                   << pragmaQuery.lastError().text();
+    }
+    return db;
+}
+
 QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, const QDateTime &end,
+                                                     int limit, int offset)
+{
+    if (!m_database.isOpen()) {
+        m_lastError = "Database is not open";
+        return {};
+    }
+    return getHistoricalData(m_database, start, end, limit, offset);
+}
+
+QList<SensorData> DatabaseManager::getHistoricalData(const QSqlDatabase &db,
+                                                     const QDateTime &start, const QDateTime &end,
                                                      int limit, int offset)
 {
     QList<SensorData> result;
 
-    if (!m_database.isOpen()) {
-        m_lastError = "Database is not open";
+    if (!db.isOpen()) {
+        // 不写 m_lastError：静态版会被工作线程调用，跨线程写成员是竞争
+        qWarning() << "getHistoricalData: database connection is not open";
         return result;
     }
 
@@ -301,7 +352,7 @@ QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, con
         sql += " LIMIT :limit OFFSET :offset";
     }
 
-    QSqlQuery query(m_database);
+    QSqlQuery query(db);
     query.prepare(sql);
 
     query.bindValue(":start", start);
@@ -312,8 +363,7 @@ QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, con
     }
 
     if (!query.exec()) {
-        m_lastError = query.lastError().text();
-        qWarning() << "Failed to query historical data:" << m_lastError;
+        qWarning() << "Failed to query historical data:" << query.lastError().text();
         return result;
     }
 
@@ -329,16 +379,29 @@ QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, con
 
 SensorStatistics DatabaseManager::getStatistics(const QDateTime &start, const QDateTime &end)
 {
-    SensorStatistics stats;
-
     if (!m_database.isOpen()) {
         m_lastError = "Database is not open";
+        SensorStatistics stats;
+        stats.count = -1;
+        return stats;
+    }
+    return getStatistics(m_database, start, end);
+}
+
+SensorStatistics DatabaseManager::getStatistics(const QSqlDatabase &db,
+                                                const QDateTime &start, const QDateTime &end)
+{
+    SensorStatistics stats;
+
+    if (!db.isOpen()) {
+        // 不写 m_lastError：静态版会被工作线程调用，跨线程写成员是竞争
+        qWarning() << "getStatistics: database connection is not open";
         stats.count = -1;
         return stats;
     }
 
     // 聚合全部下推到 SQLite 执行：只回传 1 行 10 列，不随时间段数据量膨胀
-    QSqlQuery query(m_database);
+    QSqlQuery query(db);
     query.prepare(
         "SELECT COUNT(*), "
         "AVG(temperature), MAX(temperature), MIN(temperature), "
@@ -351,8 +414,7 @@ SensorStatistics DatabaseManager::getStatistics(const QDateTime &start, const QD
     query.bindValue(":end", end);
 
     if (!query.exec() || !query.next()) {
-        m_lastError = query.lastError().text();
-        qWarning() << "Failed to query statistics:" << m_lastError;
+        qWarning() << "Failed to query statistics:" << query.lastError().text();
         stats.count = -1;
         return stats;
     }
