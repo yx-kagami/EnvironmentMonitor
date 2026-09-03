@@ -20,7 +20,9 @@ public:
     explicit LoginDialog(QWidget *parent = nullptr);
     ~LoginDialog();
 
-    // 获取用户输入的主题与凭据
+    // 获取用户输入的连接参数、主题与凭据
+    QString host() const;
+    quint16 port() const;
     QString subscribeTopic() const;
     QString publishTopic() const;
     QString username() const;
@@ -53,6 +55,8 @@ private:
     QLabel *m_titleLabel;
     QLabel *m_subscribeLabel;
     QLabel *m_publishLabel;
+    QLineEdit *m_hostEdit;
+    QLineEdit *m_portEdit;
     QLineEdit *m_subscribeEdit;
     QLineEdit *m_publishEdit;
     QLineEdit *m_usernameEdit;

@@ -10,14 +10,16 @@
 #include <QMessageBox>
 #include <QCloseEvent>
 #include <QApplication>
-#include <QApplication>
+#include <QIntValidator>
 
 LoginDialog::LoginDialog(QWidget *parent)
     : QDialog(parent)
-    , m_settings(new QSettings("SmartEnvironment", "Monitor", this))
+    // 配置存 exe 同目录 config.ini
+    , m_settings(new QSettings(QCoreApplication::applicationDirPath() + "/config.ini",
+                               QSettings::IniFormat, this))
     , m_saveSettingsFlag(true)
 {
-    setWindowTitle(tr("MQTT主题设置"));
+    setWindowTitle(tr("MQTT连接设置"));
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setWindowModality(Qt::ApplicationModal);
     setFixedSize(400, 250);
@@ -47,6 +49,31 @@ void LoginDialog::setupUI()
     QFormLayout *formLayout = new QFormLayout();
     formLayout->setSpacing(10);
     formLayout->setLabelAlignment(Qt::AlignRight);
+
+    // 服务器地址
+    QLabel *hostLabel = new QLabel(tr("服务器地址:"), this);
+    hostLabel->setStyleSheet("color: #cccccc; font-size: 12px;");
+    m_hostEdit = new QLineEdit(this);
+    m_hostEdit->setPlaceholderText(tr("MQTT服务器地址"));
+    m_hostEdit->setStyleSheet(
+        "QLineEdit {"
+        "  background-color: #2d2d2d;"
+        "  color: #ffffff;"
+        "  border: 1px solid #4a4a4a;"
+        "  border-radius: 3px;"
+        "  padding: 5px;"
+        "}"
+    );
+    formLayout->addRow(hostLabel, m_hostEdit);
+
+    // 端口：validator 把输入直接圈死在 1..65535，提交时无需再查范围
+    QLabel *portLabel = new QLabel(tr("端口:"), this);
+    portLabel->setStyleSheet("color: #cccccc; font-size: 12px;");
+    m_portEdit = new QLineEdit(this);
+    m_portEdit->setPlaceholderText(tr("默认 1883"));
+    m_portEdit->setValidator(new QIntValidator(1, 65535, this));
+    m_portEdit->setStyleSheet(m_hostEdit->styleSheet());
+    formLayout->addRow(portLabel, m_portEdit);
 
     // 订阅主题
     m_subscribeLabel = new QLabel(tr("订阅主题:"), this);
@@ -172,6 +199,8 @@ void LoginDialog::setupConnections()
 {
     connect(m_okButton, &QPushButton::clicked, this, &LoginDialog::onOkClicked);
     connect(m_cancelButton, &QPushButton::clicked, this, &LoginDialog::onCancelClicked);
+    connect(m_hostEdit, &QLineEdit::textChanged, this, &LoginDialog::validateInputs);
+    connect(m_portEdit, &QLineEdit::textChanged, this, &LoginDialog::validateInputs);
     connect(m_subscribeEdit, &QLineEdit::textChanged, this, &LoginDialog::validateInputs);
     connect(m_publishEdit, &QLineEdit::textChanged, this, &LoginDialog::validateInputs);
     connect(m_saveCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
@@ -181,9 +210,22 @@ void LoginDialog::setupConnections()
 
 void LoginDialog::validateInputs()
 {
-    bool valid = !m_subscribeEdit->text().trimmed().isEmpty() &&
+    bool valid = !m_hostEdit->text().trimmed().isEmpty() &&
+                 !m_portEdit->text().trimmed().isEmpty() &&
+                 !m_subscribeEdit->text().trimmed().isEmpty() &&
                  !m_publishEdit->text().trimmed().isEmpty();
     m_okButton->setEnabled(valid);
+}
+
+QString LoginDialog::host() const
+{
+    return m_hostEdit->text().trimmed();
+}
+
+quint16 LoginDialog::port() const
+{
+    // validator 已圈定 1..65535，这里不会越界
+    return static_cast<quint16>(m_portEdit->text().toUInt());
 }
 
 QString LoginDialog::subscribeTopic() const
@@ -224,6 +266,10 @@ bool LoginDialog::saveSettings() const
 
 void LoginDialog::loadSavedSettings()
 {
+    // host/port 总是回填：没存过时用默认值（与 MainWindow::loadSettings 的默认一致）
+    m_hostEdit->setText(m_settings->value("mqtt/host", "139.196.24.105").toString());
+    m_portEdit->setText(QString::number(m_settings->value("mqtt/port", 1883).toUInt()));
+
     QString savedSubscribe = m_settings->value("mqtt/subscribe_topic", "").toString();
     QString savedPublish = m_settings->value("mqtt/publish_topic", "").toString();
     QString savedUsername = m_settings->value("mqtt/username", "").toString();
@@ -256,6 +302,11 @@ void LoginDialog::onOkClicked()
                              tr("订阅主题和发布主题不能为空"));
         return;
     }
+
+    // 服务器地址/端口不属于凭据，不受“记住主题设置”勾选影响，始终落盘
+    //（MainWindow::saveSettings 退出时同样无条件写这两项，两处行为保持一致）
+    m_settings->setValue("mqtt/host", host());
+    m_settings->setValue("mqtt/port", port());
 
     // 保存设置（如果用户选择）；取消勾选时清除已存旧值，否则下次启动仍会回填
     if (m_saveSettingsFlag) {

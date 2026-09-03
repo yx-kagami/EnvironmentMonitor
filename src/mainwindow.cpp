@@ -28,7 +28,9 @@ MainWindow::MainWindow(QWidget *parent)
     , m_databaseManager(nullptr)
     , m_statusUpdateTimer(new QTimer(this))
     , m_autoSaveTimer(new QTimer(this))
-    , m_settings(new QSettings("SmartEnvironment", "Monitor", this))
+    // 配置存 exe 同目录 config.ini（与 LoginDialog 指向同一文件），换机器随程序拷走即可
+    , m_settings(new QSettings(QCoreApplication::applicationDirPath() + "/config.ini",
+                               QSettings::IniFormat, this))
     , m_dataReceivedCount(0)
     , m_dataSavedCount(0)
     , m_chartWidget(nullptr)
@@ -50,6 +52,8 @@ MainWindow::MainWindow(QWidget *parent)
         dialog.loadSavedSettings();
 
         if (dialog.exec() == QDialog::Accepted) {
+            m_mqttHost = dialog.host();
+            m_mqttPort = dialog.port();
             m_subscribeTopic = dialog.subscribeTopic();
             m_publishTopic = dialog.publishTopic();
             m_mqttUsername = dialog.username();
@@ -491,7 +495,26 @@ void MainWindow::onSettingsClicked()
         m_mqttUsername = dialog.username();
         m_mqttPassword = dialog.password();
 
-        if (newSubscribe != m_subscribeTopic || newPublish != m_publishTopic) {
+        const QString newHost = dialog.host();
+        const quint16 newPort = dialog.port();
+
+        if (newHost != m_mqttHost || newPort != m_mqttPort) {
+            // 换了服务器：整个连接作废，主题随成员一起更新，重连后由 onMqttConnected 重新订阅
+            m_mqttHost = newHost;
+            m_mqttPort = newPort;
+            m_subscribeTopic = newSubscribe;
+            m_publishTopic = newPublish;
+
+            if (m_mqttClient && m_mqttClient->isConnected()) {
+                disconnectFromMqttBroker();
+                // disconnect 是异步的，让事件循环跑完这一轮再发起新连接
+                QTimer::singleShot(0, this, [this]() { connectToMqttBroker(); });
+            }
+
+            QMessageBox::information(this, tr("设置已更新"),
+                                     tr("服务器地址已更新为 %1:%2。")
+                                     .arg(m_mqttHost).arg(m_mqttPort));
+        } else if (newSubscribe != m_subscribeTopic || newPublish != m_publishTopic) {
             const QString oldSubscribe = m_subscribeTopic;
             m_subscribeTopic = newSubscribe;
             m_publishTopic = newPublish;
