@@ -77,6 +77,15 @@ bool DatabaseManager::initializeDatabase(const QString &dbPath)
         qWarning() << "Database structure check failed, but continuing...";
     }
 
+    // 行数缓存初始化：COUNT(*) 是全表扫描（SQLite 无行数元数据），只在启动时执行这一次；
+    // 之后由 saveSensorDataBatch/clearOldData 记账维护，不再让状态栏每秒刷一次就全表扫一次
+    {
+        QSqlQuery countQuery(m_database);
+        if (countQuery.exec("SELECT COUNT(*) FROM sensor_history") && countQuery.next()) {
+            m_recordCount = countQuery.value(0).toInt();
+        }
+    }
+
     return true;
 }
 
@@ -284,6 +293,8 @@ int DatabaseManager::saveSensorDataBatch(const QList<SensorData> &dataList)
         return 0;
     }
 
+    // 记账放 commit 之后：事务回滚的路径不会污染计数（单条版在事务内被调用，不能各自记账）
+    m_recordCount += savedCount;
     emit dataSaved(savedCount);
     return savedCount;
 }
@@ -465,6 +476,9 @@ int DatabaseManager::clearOldData(int daysToKeep)
         query.exec("VACUUM");
     }
 
+    // 行数缓存同步减账（钳到 0：外部动过库导致记账偏高时也不至于显示负数）
+    m_recordCount = qMax(0, m_recordCount - deletedCount);
+
     emit dataCleared(deletedCount);
     return deletedCount;
 }
@@ -478,18 +492,21 @@ QString DatabaseManager::getDatabaseInfo() const
     QSqlQuery query(m_database);
     QStringList info;
 
-    // 获取记录总数
-    if (query.exec("SELECT COUNT(*) FROM sensor_history") && query.next()) {
-        info.append(QString("Total records: %1").arg(query.value(0).toInt()));
-    }
+    // 行数走内存缓存（启动时 COUNT(*) 一次，之后随增删记账）：COUNT(*) 是全表扫描，状态栏每秒调本函数，
+    // 若每次都现查，百万行库上每秒把 GUI 线程堵住几十~几百毫秒，表现为拖窗口每秒卡一下
+    info.append(QString("Total records: %1").arg(m_recordCount));
 
-    // 获取最早和最晚记录时间
-    if (query.exec("SELECT MIN(timestamp), MAX(timestamp) FROM sensor_history") && query.next()) {
-        QDateTime minTime = query.value(0).toDateTime();
-        QDateTime maxTime = query.value(1).toDateTime();
-        info.append(QString("Time range: %1 to %2")
-                    .arg(minTime.toString("yyyy-MM-dd HH:mm"))
-                    .arg(maxTime.toString("yyyy-MM-dd HH:mm")));
+    // 获取最早和最晚记录时间。MIN/MAX 拆开各查一次：SQLite 的 minmax 索引优化只对单个聚合生效，
+    // 合在一句里会退化成全表扫描，百万行库上每秒一次的状态栏刷新又会卡住 GUI 线程
+    QString minStr, maxStr;
+    if (query.exec("SELECT MIN(timestamp) FROM sensor_history") && query.next()) {
+        minStr = query.value(0).toDateTime().toString("yyyy-MM-dd HH:mm");
+    }
+    if (query.exec("SELECT MAX(timestamp) FROM sensor_history") && query.next()) {
+        maxStr = query.value(0).toDateTime().toString("yyyy-MM-dd HH:mm");
+    }
+    if (!minStr.isEmpty() && !maxStr.isEmpty()) {
+        info.append(QString("Time range: %1 to %2").arg(minStr).arg(maxStr));
     }
 
     // 获取数据库文件大小

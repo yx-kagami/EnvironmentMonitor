@@ -91,6 +91,10 @@ private:
     QString m_databasePath;
     mutable QString m_lastError;
 
+    // 行数内存缓存：启动时 COUNT(*) 一次，之后随批量入库/清理记账增减；
+    // 状态栏每秒刷新走这个值，不再每次全表扫 COUNT(*)
+    int m_recordCount = 0;
+
     // 库路径静态副本：静态方法 openThreadConnection() 用；initializeDatabase() 写入后只读
     static QString s_databasePath;
 };
