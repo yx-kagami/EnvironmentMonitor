@@ -177,7 +177,9 @@ void MainWindow::setupUI()
     if (ui->mainScrollArea) {
         ui->mainScrollArea->setStyleSheet("QScrollArea { background-color: transparent; border: none; }");
         if (ui->mainScrollArea->widget()) {
-            ui->mainScrollArea->widget()->setStyleSheet("background-color: transparent;");
+            // 局部样式表必须带选择器，否则会沿父子链泄漏到组合框弹层等后代控件
+            ui->mainScrollArea->widget()->setObjectName(QStringLiteral("scrollContents"));
+            ui->mainScrollArea->widget()->setStyleSheet("QWidget#scrollContents { background-color: transparent; }");
             // 确保内容区最小高度足够大，避免子控件被压缩
             ui->mainScrollArea->widget()->setMinimumHeight(600);
         }

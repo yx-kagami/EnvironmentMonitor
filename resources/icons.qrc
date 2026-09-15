@@ -18,5 +18,7 @@
     <file alias="warning.png">icons/warning.png</file>
     <!-- Settings icon -->
     <file alias="settings.png">icons/settings.png</file>
+    <!-- Down arrow icon -->
+    <file alias="arrow_down.svg">icons/arrow_down.svg</file>
 </qresource>
 </RCC>
