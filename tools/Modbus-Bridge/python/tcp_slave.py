@@ -28,9 +28,9 @@ store = ModbusSlaveContext(
 context = ModbusServerContext(slaves=store, single=True)
 
 def update_loop():
-    """每 2 秒随机改一次寄存器值。"""
+    """每 1 秒随机改一次寄存器值。"""
     while True:
-        time.sleep(2)
+        time.sleep(1)
         t = 250 + random.randint(-20, 20)
         h = 600 + random.randint(-50, 50)
         light = random.randint(0, 4095)

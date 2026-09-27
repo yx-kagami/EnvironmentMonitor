@@ -12,6 +12,8 @@ qt_add_executable(modbus2mqtt
     src/main.cpp
     src/modbustcp.h
     src/modbustcp.cpp
+    src/modbusclient.h
+    src/modbusclient.cpp
 )
 
 target_link_libraries(modbus2mqtt
