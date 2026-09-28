@@ -17,6 +17,7 @@ public:
 
 signals:
     void linkStateChanged(bool connected);
+    void commandReceived(const QString& cmd);   //下行命令
 
 private:
     QMqttClient* m_client = nullptr;

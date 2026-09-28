@@ -24,6 +24,9 @@ private:
     QLabel* m_errLabel = nullptr;
     QLabel* m_tcpStateLabel = nullptr;
     QLabel* m_mqttStateLabel = nullptr;
+    QLabel* m_threshLabel = nullptr;
+    QLabel* m_switchLabel = nullptr;
+    QLabel* m_lastWriteLabel = nullptr;
     ModbusClient* m_client = nullptr;
     MqttBridge* m_mqtt = nullptr;
 };

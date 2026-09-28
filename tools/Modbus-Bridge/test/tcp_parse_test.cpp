@@ -8,6 +8,7 @@ private slots:
     void buildRequest();
     void parseValidResp();
     void parseRejects();
+    void writeSingle();
 };
 
 void TcpParseTest::buildRequest()
@@ -42,6 +43,18 @@ void TcpParseTest::parseRejects()
     QVERIFY(!modbustcp::parseReadHoldingResponse(validResp.left(10), 1, 1, regs));
     //异常应答83，异常码02
     QVERIFY(!modbustcp::parseReadHoldingResponse(QByteArray::fromHex("000100000003018302"), 1, 1, regs));
+}
+
+void TcpParseTest::writeSingle()
+{
+    //写入成功时FC06的应答帧=请求帧原样返回
+    const QByteArray req = modbustcp::buildWriteSingleRequest(1, 1, 8, 1);
+    QCOMPARE(req, QByteArray::fromHex("000100000006010600080001"));
+    QVERIFY(modbustcp::parseWriteSingleResponse(req, 1, 1, 8, 1));
+    QVERIFY(!modbustcp::parseWriteSingleResponse(req, 2, 1, 8, 1));
+    QVERIFY(!modbustcp::parseWriteSingleResponse(req, 1, 1, 8, 0));
+    //异常应答83
+    QVERIFY(!modbustcp::parseWriteSingleResponse(QByteArray::fromHex("000100000003018602"), 1, 1, 8, 1));
 }
 
 QTEST_APPLESS_MAIN(TcpParseTest)

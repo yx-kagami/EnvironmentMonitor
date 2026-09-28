@@ -3,6 +3,8 @@
 #include <QJsonObject>
 #include <QMqttClient>
 #include <QTimer>
+#include <QMqttMessage>
+#include <QMqttSubscription>
 
 MqttBridge::MqttBridge(QObject* parent) : QObject(parent)
 {
@@ -14,8 +16,20 @@ MqttBridge::MqttBridge(QObject* parent) : QObject(parent)
             m_client->connectToHost();
     });
     connect(m_client, &QMqttClient::stateChanged, this, [this](QMqttClient::ClientState s){
-        if(s == QMqttClient::Connected) m_reconnectTimer->stop();
-        else m_reconnectTimer->start();
+        if(s == QMqttClient::Connected) {
+            m_reconnectTimer->stop();
+            //下行命令通道，订阅上位机命令主题
+            auto* sub = m_client->subscribe(QStringLiteral("pub100010"));
+            if(sub) {
+                connect(sub, &QMqttSubscription::messageReceived, this, [this](const QMqttMessage& msg){
+                    QString cmd = QString::fromUtf8(msg.payload());
+                    while(cmd.endsWith(QLatin1Char('\0'))) cmd.chop(1);
+                    emit commandReceived(cmd);
+                });
+            }
+        } else {
+            m_reconnectTimer->start();
+        }
         emit linkStateChanged(s == QMqttClient::Connected);
     });
 }

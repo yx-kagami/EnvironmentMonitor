@@ -13,6 +13,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     m_tempLabel = new QLabel(QStringLiteral("--"), this);
     m_humiLabel = new QLabel(QStringLiteral("--"), this);
     m_lightLabel = new QLabel(QStringLiteral("--"), this);
+    m_threshLabel = new QLabel(QStringLiteral("--"), this);
+    m_switchLabel = new QLabel(QStringLiteral("--"), this);
+    m_lastWriteLabel = new QLabel(QStringLiteral("--"), this);
     m_okLabel = new QLabel(QStringLiteral("0"), this);
     m_timeoutLabel = new QLabel(QStringLiteral("0"), this);
     m_errLabel = new QLabel(QStringLiteral("0"), this);
@@ -22,6 +25,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     form->addRow(QStringLiteral("温度："), m_tempLabel);
     form->addRow(QStringLiteral("湿度："), m_humiLabel);
     form->addRow(QStringLiteral("光照ADC："), m_lightLabel);
+    form->addRow(QStringLiteral("阈值："), m_threshLabel);
+    form->addRow(QStringLiteral("开关："), m_switchLabel);
+    form->addRow(QStringLiteral("寄存器写入："), m_lastWriteLabel);
     form->addRow(QStringLiteral("成功帧："), m_okLabel);
     form->addRow(QStringLiteral("超时："), m_timeoutLabel);
     form->addRow(QStringLiteral("错误帧："), m_errLabel);
@@ -47,6 +53,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
         m_tempLabel->setText(QString::number(t, 'f', 1) + QStringLiteral("℃"));
         m_humiLabel->setText(QString::number(h, 'f', 1) + QStringLiteral("%"));
         m_lightLabel->setText(QString::number(l));
+        m_threshLabel->setText(QStringLiteral("温度%1/%2℃ 湿度%3/%4% 光照%5")
+                                   .arg(regs.value(3) / 10.0).arg(regs.value(4) / 10.0).arg(regs.value(5) / 10.0)
+                                   .arg(regs.value(6) / 10.0).arg(regs.value(7)));
+        QStringList sw;
+        for(int i = 8; i < 14; ++i)
+            sw << (regs.value(i) ? QStringLiteral("ON") : QStringLiteral("OFF"));
+        m_switchLabel->setText(sw.join(QStringLiteral(" ")));
         m_mqtt->publishData(regs);
     });
     connect(m_client, &ModbusClient::countersChanged, this, [this](int ok, int tout, int err){
@@ -59,5 +72,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     });
     connect(m_mqtt, &MqttBridge::linkStateChanged, this, [this](bool on){
         m_mqttStateLabel->setText(on ? QStringLiteral("已连接") : QStringLiteral("断开"));
+    });
+    connect(m_mqtt, &MqttBridge::commandReceived, m_client, &ModbusClient::handleCommand);
+    connect(m_client, &ModbusClient::writeDone, this, [this](quint16 reg, quint16 val){
+        m_lastWriteLabel->setText(QStringLiteral("寄存器[%1] ← %2").arg(reg).arg(val));
     });
 }
