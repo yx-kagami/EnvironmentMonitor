@@ -6,6 +6,7 @@
 class QLabel;
 class QPushButton;
 class ModbusClient;
+class MqttBridge;
 
 class MainWindow : public QMainWindow
 {
@@ -22,7 +23,9 @@ private:
     QLabel* m_timeoutLabel = nullptr;
     QLabel* m_errLabel = nullptr;
     QLabel* m_tcpStateLabel = nullptr;
+    QLabel* m_mqttStateLabel = nullptr;
     ModbusClient* m_client = nullptr;
+    MqttBridge* m_mqtt = nullptr;
 };
 
 #endif // MAINWINDOW_H

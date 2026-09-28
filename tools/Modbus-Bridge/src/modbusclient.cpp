@@ -56,7 +56,7 @@ void ModbusClient::onDisconnected()
 void ModbusClient::onPollTick()
 {
     if(m_busy) return;
-    m_sock->write(modbustcp::buildReadHoldingRequest(++m_txn, 1, 0, 3));
+    m_sock->write(modbustcp::buildReadHoldingRequest(++m_txn, 1, 0, 14));
     m_busy = true;
     m_respTimer->start();
 }
