@@ -642,6 +642,15 @@ QPushButton[class="thresholdButton"] {
     font-weight: bold;
     min-width: 28px;
     min-height: 28px;
+    /* 覆盖通用 QPushButton 的 padding/min-height，否则 22px 小按钮的内容区被吃光、字形底部被裁 */
+    padding: 0;
+}
+
+/* 历史对话框的查询/导出按钮：22px 方块之外，需要按 12pt 粗体汉字完整显示 */
+QPushButton[class="thresholdButton"][textButton="true"] {
+    min-width: 104px;
+    min-height: 32px;
+    padding: 0 8px;
 }
 
 QPushButton[class="thresholdButton"]:hover {

@@ -422,6 +422,15 @@ QTableView::item:selected {
     background-color: #3b82f6;
     color: #ffffff;
 }
+/* 深色下表格被样式表接管，表头缺省尺寸太小会压歪列宽计算，显式补全 */
+QHeaderView::section {
+    background-color: #2a2d3c;
+    color: #e0e2e8;
+    padding: 6px 8px;
+    border: none;
+    border-right: 1px solid #3a3f52;
+    border-bottom: 1px solid #3a3f52;
+}
 
 /* 滚动条 */
 QScrollBar:vertical {
@@ -642,6 +651,15 @@ QPushButton[class="thresholdButton"] {
     font-weight: bold;
     min-width: 28px;
     min-height: 28px;
+    /* 覆盖通用 QPushButton 的 padding/min-height，否则 22px 小按钮的内容区被吃光、字形底部被裁 */
+    padding: 0;
+}
+
+/* 历史对话框的查询/导出按钮：22px 方块之外，需要按 12pt 粗体汉字完整显示 */
+QPushButton[class="thresholdButton"][textButton="true"] {
+    min-width: 104px;
+    min-height: 32px;
+    padding: 0 8px;
 }
 
 QPushButton[class="thresholdButton"]:hover {

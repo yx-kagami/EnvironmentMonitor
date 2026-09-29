@@ -128,7 +128,9 @@ void MainWindow::setupUI()
     m_switchControlWidget = new SwitchControlWidget(this);
     m_switchControlWidget->setMinimumHeight(240);
     m_thresholdEditorWidget = new ThresholdEditorWidget(this);
-    m_thresholdEditorWidget->setMinimumHeight(90);
+    // QSS 给 thresholdButton 定了 28px 最小高度，三行加间距实际需要约 96px，
+    // 90 会把最下面一行按钮底部裁掉一点
+    m_thresholdEditorWidget->setMinimumHeight(96);
     m_chartWidget = new ChartWidget(this);
 
     if (ui->sensorDisplayPlaceholder) {

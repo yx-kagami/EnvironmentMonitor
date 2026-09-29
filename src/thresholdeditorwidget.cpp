@@ -60,7 +60,7 @@ void ThresholdEditorWidget::setupUI()
         spinBox->setButtonSymbols(QAbstractSpinBox::NoButtons);
         spinBox->setProperty("class", "thresholdSpinBox");
         spinBox->setFixedWidth(75);
-        spinBox->setFixedHeight(22);
+        spinBox->setMinimumHeight(22);
 
         QHBoxLayout *rowLayout = new QHBoxLayout();
         rowLayout->setSpacing(3);

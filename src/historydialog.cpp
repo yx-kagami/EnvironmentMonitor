@@ -161,10 +161,12 @@ void HistoryDialog::setupUI()
 
     m_queryButton = new QPushButton(tr("查询数据"), this);
     m_queryButton->setProperty("class", "thresholdButton");
+    m_queryButton->setProperty("textButton", true);   // QSS 按此属性给足文字按钮宽度
     connect(m_queryButton, &QPushButton::clicked, this, &HistoryDialog::onQueryClicked);
 
     m_exportButton = new QPushButton(tr("导出CSV"), this);
     m_exportButton->setProperty("class", "thresholdButton");
+    m_exportButton->setProperty("textButton", true);
     connect(m_exportButton, &QPushButton::clicked, this, &HistoryDialog::onExportClicked);
 
     queryLayout->addWidget(quickLabel, 0, 0);
@@ -233,6 +235,8 @@ void HistoryDialog::setupUI()
 void HistoryDialog::onQuickRangeChanged(int index)
 {
     Q_UNUSED(index); // 区间值从 currentData() 取，index 形参仅为匹配信号签名
+    // 快速范围变化会改时段、清空结果，列宽按新数据重新定一次
+    m_columnsSized = false;
     int hours = m_quickRangeCombo->currentData().toInt();
     QDateTime end = QDateTime::currentDateTime();
     QDateTime start;
@@ -353,8 +357,11 @@ void HistoryDialog::onQueryFinished(bool success, const QList<SensorData> &dataL
     updateStatistics(stats);
     updatePageControls();
 
-    // 自动调整列宽
-    m_tableView->resizeColumnsToContents();
+    // 列宽一次性按内容确定，之后固定：翻页只换数据，列宽不再反复重算抖动
+    if (!m_columnsSized) {
+        m_tableView->resizeColumnsToContents();
+        m_columnsSized = true;
+    }
 }
 
 void HistoryDialog::updateInputEnabled()

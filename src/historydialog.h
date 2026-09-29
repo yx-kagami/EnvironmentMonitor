@@ -60,6 +60,7 @@ private:
     QSpinBox *m_pageSpinBox;   // 页码跳转输入框：范围 1..总页数
     int m_currentPage = 0;
     int m_totalCount = 0;
+    bool m_columnsSized = false;    // 列宽只在首次填表时按内容定一次，之后固定
     bool m_queryInFlight = false;   // HistoryQueryTask（统计+分页查询）是否在途
     bool m_exportInFlight = false;  // CsvExportTask（全量查询+写文件）是否在途
 };
