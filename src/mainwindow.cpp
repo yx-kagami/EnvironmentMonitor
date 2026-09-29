@@ -68,7 +68,8 @@ MainWindow::MainWindow(QWidget *parent)
                 m_settings->sync();
             }
         } else {
-            QApplication::exit(0);
+            // 登录取消：构造到此为止。exit() 在事件循环启动前无效，置标志由 main() 退出
+            m_loginCancelled = true;
             return;
         }
     }

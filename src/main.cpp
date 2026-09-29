@@ -119,6 +119,9 @@ int main(int argc, char *argv[])
 
     // 创建主窗口
     MainWindow mainWindow;
+    if (mainWindow.isLoginCancelled()) {
+        return 0;
+    }
     mainWindow.show();
 
     qDebug() << "Application started successfully";

@@ -29,6 +29,9 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+    // 登录对话框取消时为 true：事件循环未启动时 exit() 无效，由 main() 据此直接退出
+    bool isLoginCancelled() const { return m_loginCancelled; }
+
 signals:
     // 统一数据模型的信号槽分发：无条件更新的模块（实时显示、曲线）直接挂这个信号，
     // 带条件逻辑的模块（自动模式开关回显、阈值显示）由协调器直调
@@ -125,6 +128,7 @@ private:
     bool m_isConnected;
     bool m_autoSaveEnabled;
     bool m_lightTheme;
+    bool m_loginCancelled = false;
     bool m_rememberMqttSettings = true;  // 对应登录框“记住主题设置”：false 时退出不落盘 MQTT 参数
     QDateTime m_lastDataTime;
 
