@@ -35,7 +35,7 @@ private slots:
 
 private:
     void setupUI();
-    void loadData(const QDateTime &start, const QDateTime &end);
+    void loadData(const QDateTime &start, const QDateTime &end, bool withStats);
     void updateStatistics(const SensorStatistics &stats);
     void updatePageControls();
     // 在途状态统一收口：查询/导出任一在途时禁用查询、翻页、导出入口，完成后恢复
@@ -61,8 +61,9 @@ private:
     int m_currentPage = 0;
     int m_totalCount = 0;
     bool m_columnsSized = false;    // 列宽只在首次填表时按内容定一次，之后固定
-    bool m_queryInFlight = false;   // HistoryQueryTask（统计+分页查询）是否在途
+    bool m_queryInFlight = false;   // HistoryQueryTask（分页查询，新查询时含统计）是否在途
     bool m_exportInFlight = false;  // CsvExportTask（全量查询+写文件）是否在途
+    bool m_expectStats = false;     // 本次在途查询是否带统计：统计只随新查询重算，翻页不重算
 };
 
 #endif // HISTORYDIALOG_H

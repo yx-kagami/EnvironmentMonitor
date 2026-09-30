@@ -53,17 +53,19 @@ private:
     QDateTime m_end;
 };
 
-// 历史查询任务：统计+分页查询放线程池（同 CsvExportTask 模式），finished 回 GUI 填表
+// 历史查询任务：分页查询放线程池（同 CsvExportTask 模式），finished 回 GUI 填表；
+// 统计只在新查询时计算（withStats），翻页/跳页不重复聚合
 class HistoryQueryTask : public QObject, public QRunnable
 {
     Q_OBJECT
 
 public:
-    HistoryQueryTask(QDateTime start, QDateTime end, int limit, int offset)
+    HistoryQueryTask(QDateTime start, QDateTime end, int limit, int offset, bool withStats)
         : m_start(std::move(start))
         , m_end(std::move(end))
         , m_limit(limit)
         , m_offset(offset)
+        , m_withStats(withStats)
     {
         setAutoDelete(false);   // 生命周期显式管理：finished 投递完后 deleteLater
     }
@@ -77,8 +79,11 @@ public:
             emit finished(false, {}, SensorStatistics{});
             return;
         }
-        // 统计先行（覆盖全时段），再 LIMIT/OFFSET 取当前页
-        SensorStatistics stats = DatabaseManager::getStatistics(db, m_start, m_end);
+        // 统计覆盖全时段、一次聚合百万行约几百毫秒，只有新查询才算；翻页仅 LIMIT/OFFSET 取当前页
+        SensorStatistics stats;
+        if (m_withStats) {
+            stats = DatabaseManager::getStatistics(db, m_start, m_end);
+        }
         QList<SensorData> pageData =
             DatabaseManager::getHistoricalData(db, m_start, m_end, m_limit, m_offset);
         qInfo() << "page query took" << queryTimer.elapsed() << "ms,"
@@ -95,6 +100,7 @@ private:
     QDateTime m_end;
     int m_limit;
     int m_offset;
+    bool m_withStats;
 };
 
 HistoryDialog::HistoryDialog(DatabaseManager *dbManager, QWidget *parent)
@@ -262,14 +268,14 @@ void HistoryDialog::onQueryClicked()
     }
 
     m_currentPage = 0;   // 新查询总是从第一页开始
-    loadData(start, end);
+    loadData(start, end, true);
 }
 
 void HistoryDialog::onPrevPage()
 {
     if (m_currentPage > 0) {
         --m_currentPage;
-        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime());
+        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime(), false);
     }
 }
 
@@ -277,11 +283,11 @@ void HistoryDialog::onNextPage()
 {
     if ((m_currentPage + 1) * kPageSize < m_totalCount) {
         ++m_currentPage;
-        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime());
+        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime(), false);
     }
 }
 
-void HistoryDialog::loadData(const QDateTime &start, const QDateTime &end)
+void HistoryDialog::loadData(const QDateTime &start, const QDateTime &end, bool withStats)
 {
     if (!m_databaseManager || !m_databaseManager->isOpen()) {
         QMessageBox::warning(this, tr("数据库错误"), tr("数据库未打开或不可用"));
@@ -290,9 +296,10 @@ void HistoryDialog::loadData(const QDateTime &start, const QDateTime &end)
 
     // 查询在途防重入；旧数据留在表格里，结果回来一次性替换，避免闪烁
     m_queryInFlight = true;
+    m_expectStats = withStats;
     updateInputEnabled();
 
-    auto *task = new HistoryQueryTask(start, end, kPageSize, m_currentPage * kPageSize);
+    auto *task = new HistoryQueryTask(start, end, kPageSize, m_currentPage * kPageSize, withStats);
     connect(task, &HistoryQueryTask::finished, this,
             &HistoryDialog::onQueryFinished, Qt::QueuedConnection);
     // 对话框提前关闭时任务对象也能自行回收
@@ -313,8 +320,10 @@ void HistoryDialog::onQueryFinished(bool success, const QList<SensorData> &dataL
 
     m_tableModel->removeRows(0, m_tableModel->rowCount());
 
-    // 统计覆盖整个时间段，不随翻页变化，避免“当前页的统计”误导
-    m_totalCount = qMax(0, stats.count);
+    // 统计覆盖整个时间段、只随新查询重算；翻页响应不带统计，沿用已有总数与统计面板
+    if (m_expectStats) {
+        m_totalCount = qMax(0, stats.count);
+    }
 
     // 异步后总数要查完才知道，页码只能事后钳制；
     // 被压小时按钳制页补查一次（钳制页必然合法，不会循环）
@@ -322,7 +331,7 @@ void HistoryDialog::onQueryFinished(bool success, const QList<SensorData> &dataL
     const int clampedPage = qMin(m_currentPage, qMax(0, totalPages - 1));
     if (clampedPage != m_currentPage) {
         m_currentPage = clampedPage;
-        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime());
+        loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime(), false);
         return;
     }
 
@@ -354,7 +363,9 @@ void HistoryDialog::onQueryFinished(bool success, const QList<SensorData> &dataL
         m_tableModel->appendRow(rowItems);
     }
 
-    updateStatistics(stats);
+    if (m_expectStats) {
+        updateStatistics(stats);
+    }
     updatePageControls();
 
     // 列宽一次性按内容确定，之后固定：翻页只换数据，列宽不再反复重算抖动
@@ -389,7 +400,7 @@ void HistoryDialog::onPageJumped(int page)
     const int target = qBound(1, page, totalPages) - 1;
     if (target == m_currentPage) return;
     m_currentPage = target;
-    loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime());
+    loadData(m_startTimeEdit->dateTime(), m_endTimeEdit->dateTime(), false);
 }
 
 void HistoryDialog::updatePageControls()
