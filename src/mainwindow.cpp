@@ -126,6 +126,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::setupUI()
 {
     m_sensorDisplayWidget = new SensorDisplayWidget(this);
+    m_sensorDisplayWidget->setLightTheme(m_lightTheme);
     m_switchControlWidget = new SwitchControlWidget(this);
     m_switchControlWidget->setMinimumHeight(240);
     m_thresholdEditorWidget = new ThresholdEditorWidget(this);
@@ -780,6 +781,7 @@ void MainWindow::setTheme(bool light)
     m_lightTheme = light;
     applyStyleSheet();
     m_chartWidget->setLightTheme(light);
+    m_sensorDisplayWidget->setLightTheme(light);
     saveSettings();
     qDebug() << "Theme changed to:" << (m_lightTheme ? "Light" : "Dark");
 }

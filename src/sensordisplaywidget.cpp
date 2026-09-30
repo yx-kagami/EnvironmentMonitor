@@ -3,15 +3,31 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPixmap>
+#include <QImage>
+
+// 三个传感器图标都是黑字透明底 PNG：深色主题下只反色 RGB、保留 alpha，
+static QPixmap themedIcon(const QString &path, bool lightTheme)
+{
+    QImage img(path);
+    if (!lightTheme) {
+        img = img.convertToFormat(QImage::Format_ARGB32);
+        img.invertPixels(QImage::InvertRgb);
+    }
+    return QPixmap::fromImage(img).scaled(20, 20, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
 
 SensorDisplayWidget::SensorDisplayWidget(QWidget *parent)
     : QWidget(parent)
     , m_temperatureLabel(nullptr)
     , m_humidityLabel(nullptr)
     , m_lightIntensityLabel(nullptr)
+    , m_tempIcon(nullptr)
+    , m_humiIcon(nullptr)
+    , m_lightIcon(nullptr)
     , m_temperature(0.0)
     , m_humidity(0.0)
     , m_lightIntensity(0.0)
+    , m_lightTheme(true)
 {
     setAttribute(Qt::WA_StyledBackground, true);
     setupUI();
@@ -28,17 +44,17 @@ void SensorDisplayWidget::setupUI()
     // 温度显示
     QHBoxLayout *tempLayout = new QHBoxLayout();
     tempLayout->setSpacing(4);
-    QLabel *tempIcon = new QLabel(this);
-    tempIcon->setPixmap(QPixmap(":/temperature.png").scaled(20, 20, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    tempIcon->setAlignment(Qt::AlignCenter);
-    tempIcon->setFixedSize(24, 24);
+    m_tempIcon = new QLabel(this);
+    m_tempIcon->setPixmap(themedIcon(QStringLiteral(":/temperature.png"), m_lightTheme));
+    m_tempIcon->setAlignment(Qt::AlignCenter);
+    m_tempIcon->setFixedSize(24, 24);
 
     m_temperatureLabel = new QLabel(tr("0.0°C"), this);
     m_temperatureLabel->setAlignment(Qt::AlignCenter);
     m_temperatureLabel->setProperty("valueType", "temperature");
 
     tempLayout->addStretch();
-    tempLayout->addWidget(tempIcon);
+    tempLayout->addWidget(m_tempIcon);
     tempLayout->addWidget(m_temperatureLabel);
     tempLayout->addStretch();
     mainLayout->addLayout(tempLayout);
@@ -46,17 +62,17 @@ void SensorDisplayWidget::setupUI()
     // 湿度显示
     QHBoxLayout *humiLayout = new QHBoxLayout();
     humiLayout->setSpacing(4);
-    QLabel *humiIcon = new QLabel(this);
-    humiIcon->setPixmap(QPixmap(":/humidity.png").scaled(20, 20, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    humiIcon->setAlignment(Qt::AlignCenter);
-    humiIcon->setFixedSize(24, 24);
+    m_humiIcon = new QLabel(this);
+    m_humiIcon->setPixmap(themedIcon(QStringLiteral(":/humidity.png"), m_lightTheme));
+    m_humiIcon->setAlignment(Qt::AlignCenter);
+    m_humiIcon->setFixedSize(24, 24);
 
     m_humidityLabel = new QLabel(tr("0.0%"), this);
     m_humidityLabel->setAlignment(Qt::AlignCenter);
     m_humidityLabel->setProperty("valueType", "humidity");
 
     humiLayout->addStretch();
-    humiLayout->addWidget(humiIcon);
+    humiLayout->addWidget(m_humiIcon);
     humiLayout->addWidget(m_humidityLabel);
     humiLayout->addStretch();
     mainLayout->addLayout(humiLayout);
@@ -64,20 +80,36 @@ void SensorDisplayWidget::setupUI()
     // 光照显示
     QHBoxLayout *lightLayout = new QHBoxLayout();
     lightLayout->setSpacing(4);
-    QLabel *lightIcon = new QLabel(this);
-    lightIcon->setPixmap(QPixmap(":/light.png").scaled(20, 20, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    lightIcon->setAlignment(Qt::AlignCenter);
-    lightIcon->setFixedSize(24, 24);
+    m_lightIcon = new QLabel(this);
+    m_lightIcon->setPixmap(themedIcon(QStringLiteral(":/light.png"), m_lightTheme));
+    m_lightIcon->setAlignment(Qt::AlignCenter);
+    m_lightIcon->setFixedSize(24, 24);
 
     m_lightIntensityLabel = new QLabel(tr("0 Lux"), this);
     m_lightIntensityLabel->setAlignment(Qt::AlignCenter);
     m_lightIntensityLabel->setProperty("valueType", "light");
 
     lightLayout->addStretch();
-    lightLayout->addWidget(lightIcon);
+    lightLayout->addWidget(m_lightIcon);
     lightLayout->addWidget(m_lightIntensityLabel);
     lightLayout->addStretch();
     mainLayout->addLayout(lightLayout);
+}
+
+void SensorDisplayWidget::setLightTheme(bool light)
+{
+    if (m_lightTheme == light) {
+        return;
+    }
+    m_lightTheme = light;
+    updateIcons();
+}
+
+void SensorDisplayWidget::updateIcons()
+{
+    m_tempIcon->setPixmap(themedIcon(QStringLiteral(":/temperature.png"), m_lightTheme));
+    m_humiIcon->setPixmap(themedIcon(QStringLiteral(":/humidity.png"), m_lightTheme));
+    m_lightIcon->setPixmap(themedIcon(QStringLiteral(":/light.png"), m_lightTheme));
 }
 
 void SensorDisplayWidget::setTemperature(double value)
