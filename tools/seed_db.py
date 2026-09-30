@@ -21,8 +21,9 @@ import datetime
 DB_PATH = "sensor_data.db"              # 默认当前目录；程序的库在 exe 同目录
 N = 1_000_000
 BATCH = 50_000
-START = datetime.datetime(2026, 8, 10, 0, 0, 0)
 STEP = datetime.timedelta(seconds=1)    # 每秒一条，100 万条约 11.6 天
+# 数据结束于运行时刻：app 退出时会清理 30 天前的旧数据，写死日期灌进去会被清掉
+START = datetime.datetime.now() - N * STEP
 CLEAN_EXISTING = True                   # 灌入前清空旧数据
 
 SCHEMA = """
