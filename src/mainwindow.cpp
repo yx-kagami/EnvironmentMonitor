@@ -727,7 +727,7 @@ void MainWindow::onHelpAbout()
 
 void MainWindow::loadSettings()
 {
-    m_mqttHost = m_settings->value("mqtt/host", "139.196.24.105").toString();
+    m_mqttHost = m_settings->value("mqtt/host", "127.0.0.1").toString();
     m_mqttPort = m_settings->value("mqtt/port", 1883).toUInt();
     m_mqttUsername = m_settings->value("mqtt/username", "").toString();
     m_mqttPassword = m_settings->value("mqtt/password", "").toString();

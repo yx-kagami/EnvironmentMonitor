@@ -267,7 +267,7 @@ bool LoginDialog::saveSettings() const
 void LoginDialog::loadSavedSettings()
 {
     // host/port 总是回填：没存过时用默认值（与 MainWindow::loadSettings 的默认一致）
-    m_hostEdit->setText(m_settings->value("mqtt/host", "139.196.24.105").toString());
+    m_hostEdit->setText(m_settings->value("mqtt/host", "127.0.0.1").toString());
     m_portEdit->setText(QString::number(m_settings->value("mqtt/port", 1883).toUInt()));
 
     QString savedSubscribe = m_settings->value("mqtt/subscribe_topic", "").toString();
