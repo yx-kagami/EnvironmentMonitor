@@ -34,9 +34,6 @@ public:
 
     void closeDatabase();
 
-    // 保存传感器数据
-    bool saveSensorData(const SensorData &data);
-
     // 批量保存，返回成功条数
     int saveSensorDataBatch(const QList<SensorData> &dataList);
 
@@ -86,6 +83,8 @@ private:
     bool checkDatabaseStructure();
     // 行→对象映射只收口在这一处；static 供静态查询重载（工作线程路径）复用
     static SensorData sensorDataFromQuery(const QSqlQuery &query);
+    // 循环复用同一条预编译语句，不重复prepare
+    static bool insertRow(QSqlQuery &query, const SensorData &data);
 
     QSqlDatabase m_database;
     QString m_databasePath;

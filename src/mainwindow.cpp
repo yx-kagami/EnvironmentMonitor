@@ -354,6 +354,9 @@ void MainWindow::initializeDatabase()
         QMessageBox::warning(this, tr("数据库错误"),
                              tr("无法初始化数据库：%1").arg(m_databaseManager->lastError()));
     } else {
+        connect(m_databaseManager, &DatabaseManager::databaseError, this, [this](const QString &error) {
+            statusBar()->showMessage(tr("数据库错误：%1").arg(error), 8000);
+        });
         qDebug() << "Database initialized:" << m_databaseManager->getDatabaseInfo();
     }
 }

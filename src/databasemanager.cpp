@@ -9,6 +9,19 @@
 
 QString DatabaseManager::s_databasePath;
 
+static const char insertDataSql[] =
+    "INSERT INTO sensor_history ("
+    "  timestamp, temperature, humidity, light_intensity,"
+    "  temp_upper, temp_lower, hum_upper, hum_lower, light_threshold,"
+    "  switch1_state, switch2_state, switch3_state,"
+    "  switch4_state, switch5_state, switch6_state"
+    ") VALUES ("
+    "  :timestamp, :temperature, :humidity, :light_intensity,"
+    "  :temp_upper, :temp_lower, :hum_upper, :hum_lower, :light_threshold,"
+    "  :switch1_state, :switch2_state, :switch3_state,"
+    "  :switch4_state, :switch5_state, :switch6_state"
+    ")";
+
 DatabaseManager::DatabaseManager(QObject *parent)
     : QObject(parent)
     , m_database(QSqlDatabase::addDatabase("QSQLITE", "sensor_data_connection"))
@@ -203,33 +216,8 @@ bool DatabaseManager::checkDatabaseStructure()
     return true;
 }
 
-bool DatabaseManager::saveSensorData(const SensorData &data)
+bool DatabaseManager::insertRow(QSqlQuery &query, const SensorData &data)
 {
-    if (!m_database.isOpen()) {
-        m_lastError = "Database is not open";
-        return false;
-    }
-
-    if (!data.isValid()) {
-        m_lastError = "Invalid sensor data";
-        return false;
-    }
-
-    QSqlQuery query(m_database);
-    query.prepare(
-        "INSERT INTO sensor_history ("
-        "  timestamp, temperature, humidity, light_intensity,"
-        "  temp_upper, temp_lower, hum_upper, hum_lower, light_threshold,"
-        "  switch1_state, switch2_state, switch3_state,"
-        "  switch4_state, switch5_state, switch6_state"
-        ") VALUES ("
-        "  :timestamp, :temperature, :humidity, :light_intensity,"
-        "  :temp_upper, :temp_lower, :hum_upper, :hum_lower, :light_threshold,"
-        "  :switch1_state, :switch2_state, :switch3_state,"
-        "  :switch4_state, :switch5_state, :switch6_state"
-        ")"
-    );
-
     query.bindValue(":timestamp", data.timestamp);
     query.bindValue(":temperature", data.temperature);
     query.bindValue(":humidity", data.humidity);
@@ -245,17 +233,7 @@ bool DatabaseManager::saveSensorData(const SensorData &data)
     query.bindValue(":switch4_state", data.dehumidifyingSwitch ? 1 : 0);
     query.bindValue(":switch5_state", data.lightingSwitch ? 1 : 0);
     query.bindValue(":switch6_state", data.alarmSwitch ? 1 : 0);
-
-    if (!query.exec()) {
-        m_lastError = query.lastError().text();
-        qWarning() << "Failed to save sensor data:" << m_lastError;
-        emit databaseError(m_lastError);
-        return false;
-    }
-
-    qInfo() << "Sensor data saved:" << data.timestamp.toString();
-    emit dataSaved(1);
-    return true;
+    return query.exec();
 }
 
 int DatabaseManager::saveSensorDataBatch(const QList<SensorData> &dataList)
@@ -272,30 +250,42 @@ int DatabaseManager::saveSensorDataBatch(const QList<SensorData> &dataList)
     // 开始事务
     if (!m_database.transaction()) {
         m_lastError = "Failed to start transaction";
+        qWarning() << m_lastError << m_database.lastError().text();
         return 0;
     }
 
+    QSqlQuery query(m_database);
+    query.prepare(QLatin1String(insertDataSql));
+
     int savedCount = 0;
+    int skippedCount = 0;
     for (const SensorData &data : dataList) {
-        if (saveSensorData(data)) {
-            savedCount++;
+        // 单条无效或写失败就跳过，防止一条坏数据导致整体不停重试
+        if (!data.isValid() || !insertRow(query, data)) {
+            skippedCount++;
+            continue;
         } else {
-            // 发生错误，回滚事务
-            m_database.rollback();
-            return 0;
+            savedCount++;
         }
     }
 
     // 提交事务
     if (!m_database.commit()) {
         m_lastError = "Failed to commit transaction";
+        qWarning() << m_lastError << m_database.lastError().text();
         m_database.rollback();
         return 0;
     }
 
-    // 记账放 commit 之后：事务回滚的路径不会污染计数（单条版在事务内被调用，不能各自记账）
+    // 记账放 commit 之后：事务回滚的路径不会污染计数；记账统一收口在这个批量入口
     m_recordCount += savedCount;
-    emit dataSaved(savedCount);
+    if (savedCount > 0) {
+        emit dataSaved(savedCount);
+    }
+    if (skippedCount > 0) {
+        qWarning() << "Batch save skipped" << skippedCount << "invalid/failed records";
+        emit databaseError(tr("有 %1 条数据写入失败，已跳过").arg(skippedCount));
+    }
     return savedCount;
 }
 
