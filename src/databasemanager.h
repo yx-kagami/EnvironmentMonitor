@@ -58,7 +58,7 @@ public:
 
     // 为当前线程打开一条独立连接（连接名按线程 ID 区分，同线程复用）。
     // QSqlDatabase 不能跨线程使用，由工作线程任务的 run() 调用；
-    // busy_timeout=3000：GUI 攒批写入持锁时，读侧等待重试而不是直接报 SQLITE_BUSY
+    // busy_timeout=5000：GUI 攒批写入持锁时，读侧等待重试而不是直接报 SQLITE_BUSY
     static QSqlDatabase openThreadConnection();
 
     // 清理 daysToKeep 天前的旧数据，返回删除条数

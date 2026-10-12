@@ -73,7 +73,7 @@ flowchart TB
 
 - **线程模型的取舍**：网络 I/O 是"等待"不是"计算"，Qt 事件循环本身就是异步框架——QMqttClient 留在 GUI 线程，不 moveToThread；攒批写库是毫秒级事务，也留主线程；只有真正重型的历史查询/统计/导出才进 QThreadPool。
 - **攒批写入**：传感器数据先进 `m_pendingSave` 缓冲（上限1000，溢出丢最旧），每 60s 一个事务批量落盘——SQLite 每事务一次 fsync，攒批把 N 次 fsync 摊成 1 次。崩溃丢失窗口 = 最多 60s，对缓变数据可接受。超 30 天的旧数据自动清理。
-- **连接按线程绑定**：QSqlDatabase 不能跨线程使用。GUI 线程用 `"sensor_data_connection"`；工作线程任务用 `"sensor_data_connection_worker_<线程ID>"`，同线程复用；工作连接设 `busy_timeout=3000`，GUI 攒批写入持锁时读侧等待重试而不是直接吃 SQLITE_BUSY。
+- **连接按线程绑定**：QSqlDatabase 不能跨线程使用。GUI 线程用 `"sensor_data_connection"`；工作线程任务用 `"sensor_data_connection_worker_<线程ID>"`，同线程复用；工作连接设 `busy_timeout=5000`，GUI 攒批写入持锁时读侧等待重试而不是直接吃 SQLITE_BUSY。
 - **状态栏不查库**：总记录数走内存计数（启动时 COUNT(*) 一次，之后随入库/清理记账增减）；时间范围的 MIN/MAX 拆成两句——SQLite 的 minmax 索引优化只对单个聚合生效，合写会退化成全表扫描。
 - **MQTT 可靠性**：断线重连用指数退避（1s 起翻倍、封顶 60s）+ 0~25% 随机抖动——broker 重启时大量客户端退避节奏一致会撞车（重连风暴），抖动把重连时刻打散；`cleanSession=false` 保留会话。
 - **崩溃守卫**：VEH（first-chance 拦截，x64 下穿越内核边界的回调里发生异常只走 WER，单靠 UEF 收不到）+ UEF 双保险，未处理异常自动写 minidump；handler 内只用 Win32 API + 栈缓冲，不做堆分配、不调 Qt——崩溃时进程状态已不可信。

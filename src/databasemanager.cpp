@@ -74,6 +74,16 @@ bool DatabaseManager::initializeDatabase(const QString &dbPath)
         qWarning() << "Failed to enable foreign keys:" << m_lastError;
     }
 
+    // WAL模式解决读写锁冲突
+    if (query.exec("PRAGMA journal_mode = WAL") && query.next()) {
+        const QString mode = query.value(0).toString();
+        // 防止部分不支持WAL的场景，方便排查
+        if (mode.compare(QLatin1String("wal"), Qt::CaseInsensitive) != 0) {
+            qWarning() << "journal_mode not switched to WAL, current:" << mode;
+        }
+    }
+    query.exec("PRAGMA synchronous = NORMAL");
+
     // 创建表
     if (!createTables()) {
         closeDatabase();
@@ -315,7 +325,7 @@ QSqlDatabase DatabaseManager::openThreadConnection()
 
     // busy_timeout：GUI 攒批写入持锁时，读侧等待重试而不是直接吃 SQLITE_BUSY
     QSqlQuery pragmaQuery(db);
-    if (!pragmaQuery.exec(QStringLiteral("PRAGMA busy_timeout = 3000"))) {
+    if (!pragmaQuery.exec(QStringLiteral("PRAGMA busy_timeout = 5000"))) {
         qWarning() << "Failed to set busy_timeout on worker connection:"
                    << pragmaQuery.lastError().text();
     }
