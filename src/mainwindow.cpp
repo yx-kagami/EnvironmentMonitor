@@ -117,6 +117,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     if (m_databaseManager && m_databaseManager->isOpen()) {
+        autoSaveData();
         m_databaseManager->clearOldData(30);
     }
 
