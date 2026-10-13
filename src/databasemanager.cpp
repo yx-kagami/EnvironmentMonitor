@@ -331,6 +331,12 @@ QList<SensorData> DatabaseManager::getHistoricalData(const QDateTime &start, con
     return getHistoricalData(m_database, start, end, limit, offset);
 }
 
+static const char selectColumns[] =
+    "timestamp, temperature, humidity, light_intensity,"
+    " temp_upper, temp_lower, hum_upper, hum_lower, light_threshold,"
+    " switch1_state, switch2_state, switch3_state,"
+    " switch4_state, switch5_state, switch6_state";
+
 QList<SensorData> DatabaseManager::getHistoricalData(const QSqlDatabase &db,
                                                      const QDateTime &start, const QDateTime &end,
                                                      int limit, int offset)
@@ -343,10 +349,10 @@ QList<SensorData> DatabaseManager::getHistoricalData(const QSqlDatabase &db,
         return result;
     }
 
-    QString sql =
-        "SELECT * FROM sensor_history "
+    QString sql = QStringLiteral("SELECT ") + QLatin1String(selectColumns) +
+        QStringLiteral(" FROM sensor_history "
         "WHERE timestamp BETWEEN :start AND :end "
-        "ORDER BY timestamp ASC";
+        "ORDER BY timestamp ASC");
     if (limit > 0) {
         // 分页：timestamp 索引保证 ORDER BY + LIMIT/OFFSET 走索引，小数据量下代价可忽略
         sql += " LIMIT :limit OFFSET :offset";
@@ -555,21 +561,22 @@ SensorData DatabaseManager::sensorDataFromQuery(const QSqlQuery &query)
 {
     SensorData data;
 
-    data.timestamp = query.value("timestamp").toDateTime();
-    data.temperature = query.value("temperature").toDouble();
-    data.humidity = query.value("humidity").toDouble();
-    data.lightIntensity = query.value("light_intensity").toDouble();
-    data.tempUpperLimit = query.value("temp_upper").toDouble();
-    data.tempLowerLimit = query.value("temp_lower").toDouble();
-    data.humUpperLimit = query.value("hum_upper").toDouble();
-    data.humLowerLimit = query.value("hum_lower").toDouble();
-    data.lightThreshold = query.value("light_threshold").toDouble();
-    data.coolingSwitch = query.value("switch1_state").toInt() == 1;
-    data.heatingSwitch = query.value("switch2_state").toInt() == 1;
-    data.humidifyingSwitch = query.value("switch3_state").toInt() == 1;
-    data.dehumidifyingSwitch = query.value("switch4_state").toInt() == 1;
-    data.lightingSwitch = query.value("switch5_state").toInt() == 1;
-    data.alarmSwitch = query.value("switch6_state").toInt() == 1;
+    // 下标与 selectColumns 的列序一一对应，两处顺序都不能单独改
+    data.timestamp = query.value(0).toDateTime();
+    data.temperature = query.value(1).toDouble();
+    data.humidity = query.value(2).toDouble();
+    data.lightIntensity = query.value(3).toDouble();
+    data.tempUpperLimit = query.value(4).toDouble();
+    data.tempLowerLimit = query.value(5).toDouble();
+    data.humUpperLimit = query.value(6).toDouble();
+    data.humLowerLimit = query.value(7).toDouble();
+    data.lightThreshold = query.value(8).toDouble();
+    data.coolingSwitch = query.value(9).toInt() == 1;
+    data.heatingSwitch = query.value(10).toInt() == 1;
+    data.humidifyingSwitch = query.value(11).toInt() == 1;
+    data.dehumidifyingSwitch = query.value(12).toInt() == 1;
+    data.lightingSwitch = query.value(13).toInt() == 1;
+    data.alarmSwitch = query.value(14).toInt() == 1;
 
     return data;
 }
