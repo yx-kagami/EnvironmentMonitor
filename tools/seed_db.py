@@ -66,7 +66,6 @@ def main():
     # 索引与 app 端 DatabaseManager::createIndices() 保持一致：
     # 脚本灌的库若没跑过 app 就没有索引，状态栏 MIN/MAX 和分页查询会全表扫描
     cur.execute("CREATE INDEX IF NOT EXISTS idx_sensor_history_timestamp ON sensor_history(timestamp)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_sensor_history_temperature ON sensor_history(temperature)")
 
     if CLEAN_EXISTING:
         cur.execute("DELETE FROM sensor_history")

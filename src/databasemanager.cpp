@@ -186,17 +186,6 @@ bool DatabaseManager::createIndices()
         return false;
     }
 
-    // 为温度创建索引（用于范围查询）
-    QString createTemperatureIndex =
-        "CREATE INDEX IF NOT EXISTS idx_sensor_history_temperature "
-        "ON sensor_history(temperature)";
-
-    if (!query.exec(createTemperatureIndex)) {
-        m_lastError = query.lastError().text();
-        qWarning() << "Failed to create temperature index:" << m_lastError;
-        // 继续执行
-    }
-
     qDebug() << "Database indices created successfully";
     return true;
 }
