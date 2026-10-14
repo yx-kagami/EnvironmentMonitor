@@ -73,7 +73,7 @@ flowchart TB
 
 - **线程模型的取舍**：网络 I/O 是"等待"不是"计算"，Qt 事件循环本身就是异步框架——QMqttClient 留在 GUI 线程，不 moveToThread；攒批写库是毫秒级事务，也留主线程；只有真正重型的历史查询/统计/导出才进 QThreadPool。
 - **攒批写入**：传感器数据先进 `m_pendingSave` 缓冲（上限1000，溢出丢最旧），每 60s 一个事务批量落盘——SQLite 每事务一次 fsync，攒批把 N 次 fsync 摊成 1 次。崩溃丢失窗口 = 最多 60s，对缓变数据可接受。超 30 天的旧数据自动清理。
-- **连接按线程绑定**：QSqlDatabase 不能跨线程使用。GUI 线程用 `"sensor_data_connection"`；工作线程任务用 `"sensor_data_connection_worker_<线程ID>"`，同线程复用；工作连接设 `busy_timeout=5000`，GUI 攒批写入持锁时读侧等待重试而不是直接吃 SQLITE_BUSY。
+- **连接按线程绑定**：QSqlDatabase 不能跨线程使用。GUI 线程用 `"sensor_data_connection"`；工作线程任务用 `"sensor_data_connection_worker_<线程ID>"`，同线程复用；库启用 WAL（读不阻塞写）+ `busy_timeout=5000`，写写互斥时等待重试而不是直接吃 SQLITE_BUSY。
 - **状态栏不查库**：总记录数走内存计数（启动时 COUNT(*) 一次，之后随入库/清理记账增减）；时间范围的 MIN/MAX 拆成两句——SQLite 的 minmax 索引优化只对单个聚合生效，合写会退化成全表扫描。
 - **MQTT 可靠性**：断线重连用指数退避（1s 起翻倍、封顶 60s）+ 0~25% 随机抖动——broker 重启时大量客户端退避节奏一致会撞车（重连风暴），抖动把重连时刻打散；`cleanSession=false` 保留会话。
 - **崩溃守卫**：VEH（first-chance 拦截，x64 下穿越内核边界的回调里发生异常只走 WER，单靠 UEF 收不到）+ UEF 双保险，未处理异常自动写 minidump；handler 内只用 Win32 API + 栈缓冲，不做堆分配、不调 Qt——崩溃时进程状态已不可信。
@@ -104,13 +104,15 @@ flowchart TB
 | 历史页翻页（前段） | 1~2 ms | 时间戳索引 + LIMIT/OFFSET |
 | 翻页至末页（OFFSET≈100 万） | ~130 ms | OFFSET 跳过索引项的代价，随页码线性增长 |
 | 新查询（含全时段统计聚合） | ~600 ms | COUNT/AVG/MIN/MAX 一次性算完，翻页不重算 |
-| 全量导出 100 万行 | ≈25.6 s | 查询 18.4s + 写 CSV 7.2s，全程工作线程，UI 可正常操作 |
+| 全量导出 100 万行 | ≈20.8 s | 查询 14.0s + 写 CSV 6.8s，全程工作线程，UI 可正常操作 |
 
 > 优化记录（均先用 QElapsedTimer 打点定位再动手）：
 >
 > - **状态栏周期性卡顿**：百万行库上拖动窗口每秒卡一下。定位为状态栏每秒刷新里的 `COUNT(*)` 全表扫描；改为启动时 COUNT 一次、之后随入库/清理内存记账。同处的 `MIN/MAX` 合写一句会退化成全表扫描（SQLite 的 minmax 索引优化只对单个聚合生效），拆成两句各走索引。
 > - **历史页查询/导出阻塞 UI**：查询、统计、导出全部移入 QThreadPool（每任务独立连接），结果经 QueuedConnection 回 GUI 线程。
 > - **翻页恒定 ~600ms**：打点拆解后发现分页查询本身只要 1ms，大头是每次翻页都重复执行了全时段统计聚合；拆分为"统计仅随查询条件变化重算"后，翻页降至 1~2ms。
+> - **导出取值按列名改按列下标**：按列名取值每次都走 `QSqlRecord::indexOf()` 线性查找，百万行×15 列=1500 万次；改下标并固定显式列清单后查询段 18.4s→14.0s（实测 7 次均值），同时消除 `SELECT *` 对表定义顺序的隐式依赖。
+> - **统计查询阻塞攒批落盘**：journal 模式下读事务持共享锁，长时间统计/导出会顶住攒批的 COMMIT；启用 WAL（读写不互斥）并把 `synchronous` 降为 NORMAL。
 
 ## tools/Modbus-Bridge（离线联调）
 
