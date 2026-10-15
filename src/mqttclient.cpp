@@ -68,6 +68,8 @@ bool MqttClient::connectToBroker(const QString &host, quint16 port,
     m_client->setKeepAlive(20);
     m_client->setProtocolVersion(QMqttClient::MQTT_3_1_1);
 
+    m_userRequestedDisconnect = false;
+
     qDebug() << "Connecting to MQTT broker:" << host << ":" << port;
     m_client->connectToHost();
 
@@ -76,6 +78,8 @@ bool MqttClient::connectToBroker(const QString &host, quint16 port,
 
 void MqttClient::disconnectFromBroker()
 {
+    m_userRequestedDisconnect = true;
+
     if (m_client->state() == QMqttClient::Connected) {
         qDebug() << "Disconnecting from MQTT broker";
         m_client->disconnectFromHost();
@@ -181,6 +185,8 @@ void MqttClient::onDisconnected()
     qDebug() << "Disconnected from MQTT broker";
     emit disconnected();
 
+    if(m_userRequestedDisconnect) return; // 主动断开，主动连接前不再自动重连
+
     if (m_autoReconnect && m_client->state() != QMqttClient::Connecting) {
         qDebug() << "Will attempt to reconnect in" << m_reconnectDelay << "ms";
         m_reconnectTimer->start(m_reconnectDelay);
@@ -245,6 +251,8 @@ void MqttClient::onMessageReceived(const QByteArray &message, const QMqttTopicNa
 
 void MqttClient::attemptReconnect()
 {
+    if(m_userRequestedDisconnect) return;
+
     if (m_client->state() != QMqttClient::Connected &&
         m_client->state() != QMqttClient::Connecting) {
 

@@ -56,6 +56,7 @@ private:
     QMqttClient *m_client;
     QTimer *m_reconnectTimer;
     bool m_autoReconnect;
+    bool m_userRequestedDisconnect = false;
     int m_reconnectInterval;    // 配置的基础重连间隔（setAutoReconnect 可调）
     int m_reconnectDelay;       // 当前实际重连延迟：指数退避增长，连接成功后复位
     QString m_host;

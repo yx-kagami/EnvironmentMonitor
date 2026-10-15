@@ -405,7 +405,7 @@ void MainWindow::connectToMqttBroker()
 
 void MainWindow::disconnectFromMqttBroker()
 {
-    if (m_mqttClient && m_mqttClient->isConnected()) {
+    if (m_mqttClient) {
         m_mqttClient->disconnectFromBroker();
     }
 }
