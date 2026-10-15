@@ -4,6 +4,7 @@
 #include <QJsonParseError>
 #include <QDebug>
 #include <QDateTime>
+#include <cmath>
 
 DataParser::DataParser(QObject *parent)
     : QObject(parent)
@@ -37,25 +38,38 @@ SensorData DataParser::parseJsonData(const QString &jsonString)
         return data;
     }
 
+    static const char *const keys[14] = {
+        "sensor1", "sensor2", "sensor3", "sensor4", "sensor5",
+        "sensor6", "sensor7", "sensor8", "sensor9", "sensor10",
+        "sensor11", "sensor12", "sensor13", "sensor14"
+    };
+    double v[14];
+    for (int i = 0; i < 14; ++i) {
+        if (!parseSensorValue(obj, QLatin1String(keys[i]), &v[i])) {
+            qWarning() << "Invalid sensor value for" << keys[i];
+            return data;
+        }
+    }
+
     // 解析传感器值
-    data.temperature = parseSensorValue(obj, "sensor1");
-    data.humidity = parseSensorValue(obj, "sensor2");
-    data.lightIntensity = parseSensorValue(obj, "sensor3");
+    data.temperature = v[0];
+    data.humidity = v[1];
+    data.lightIntensity = v[2];
 
     // 解析阈值
-    data.tempUpperLimit = parseSensorValue(obj, "sensor4");
-    data.tempLowerLimit = parseSensorValue(obj, "sensor5");
-    data.humUpperLimit = parseSensorValue(obj, "sensor6");
-    data.humLowerLimit = parseSensorValue(obj, "sensor7");
-    data.lightThreshold = parseSensorValue(obj, "sensor8");
+    data.tempUpperLimit = v[3];
+    data.tempLowerLimit = v[4];
+    data.humUpperLimit = v[5];
+    data.humLowerLimit = v[6];
+    data.lightThreshold = v[7];
 
     // 解析开关状态
-    data.coolingSwitch = (parseSensorValue(obj, "sensor9") == 1.0);
-    data.heatingSwitch = (parseSensorValue(obj, "sensor10") == 1.0);
-    data.humidifyingSwitch = (parseSensorValue(obj, "sensor11") == 1.0);
-    data.dehumidifyingSwitch = (parseSensorValue(obj, "sensor12") == 1.0);
-    data.lightingSwitch = (parseSensorValue(obj, "sensor13") == 1.0);
-    data.alarmSwitch = (parseSensorValue(obj, "sensor14") == 1.0);
+    data.coolingSwitch = (v[8] == 1.0);
+    data.heatingSwitch = (v[9] == 1.0);
+    data.humidifyingSwitch = (v[10] == 1.0);
+    data.dehumidifyingSwitch = (v[11] == 1.0);
+    data.lightingSwitch = (v[12] == 1.0);
+    data.alarmSwitch = (v[13] == 1.0);
 
     // 全部字段解析完成，打上接收端时间戳（下位机无 RTC 授时）
     data.timestamp = QDateTime::currentDateTime();
@@ -82,25 +96,35 @@ bool DataParser::isValidSensorObject(const QJsonObject &obj)
     return true;
 }
 
-double DataParser::parseSensorValue(const QJsonObject &obj, const QString &key)
+bool DataParser::parseSensorValue(const QJsonObject &obj, const QString &key, double *out)
 {
-    if (!obj.contains(key)) {
+    if (!out || !obj.contains(key)) {
         qWarning() << "JSON missing key:" << key;
-        return 0.0;
+        return false;
     }
 
     QJsonValue value = obj.value(key);
+    double result = 0.0;
     if (value.isDouble()) {
-        return value.toDouble();
+        result = value.toDouble();
     } else if (value.isString()) {
-        bool ok;
-        double result = value.toString().toDouble(&ok);
-        return ok ? result : 0.0;
+        bool ok = false;
+        result = value.toString().toDouble(&ok);
+        if (!ok) {
+            return false;
+        }
     } else if (value.isBool()) {
-        return value.toBool() ? 1.0 : 0.0;
+        result = value.toBool() ? 1.0 : 0.0;
+    } else {
+        return false;
     }
 
-    return 0.0;
+    if (!std::isfinite(result)) {
+        return false;
+    }
+
+    *out = result;
+    return true;
 }
 
 QString DataParser::createControlCommand(const QString &command)

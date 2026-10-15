@@ -22,6 +22,8 @@ private slots:
     void thresholdCommand();
     void thresholdCommandInvalidParam();
     void modeCommands();
+    void parseRejectsBadValues();
+    void parseRejectsOutOfRange();
 };
 
 void TestDataParser::parseRoundTrip()
@@ -85,6 +87,33 @@ void TestDataParser::parseStringNumber()
     const SensorData parsed = DataParser::parseJsonData(json);
     QVERIFY(parsed.isValid());
     QCOMPARE(parsed.temperature, 25.5);
+}
+
+void TestDataParser::parseRejectsBadValues()
+{
+    QString json = "{\"sensor1\":\"abc\",\"sensor2\":60.5,\"sensor3\":500,"
+                   "\"sensor4\":30,\"sensor5\":15,\"sensor6\":70,\"sensor7\":40,"
+                   "\"sensor8\":500,\"sensor9\":1,\"sensor10\":0,\"sensor11\":1,"
+                   "\"sensor12\":0,\"sensor13\":1,\"sensor14\":0}";
+    SensorData data = DataParser::parseJsonData(json);
+    QVERIFY(!data.isValid());
+
+    json.replace("\"abc\"", "null");
+    QVERIFY(!DataParser::parseJsonData(json).isValid());
+
+    json.replace("null", "\"25.5\"");
+    SensorData ok = DataParser::parseJsonData(json);
+    QVERIFY(ok.isValid());
+    QCOMPARE(ok.temperature, 25.5);
+}
+
+void TestDataParser::parseRejectsOutOfRange()
+{
+    const QString json = "{\"sensor1\":999,\"sensor2\":60.5,\"sensor3\":500,"
+                         "\"sensor4\":30,\"sensor5\":15,\"sensor6\":70,\"sensor7\":40,"
+                         "\"sensor8\":500,\"sensor9\":1,\"sensor10\":0,\"sensor11\":1,"
+                         "\"sensor12\":0,\"sensor13\":1,\"sensor14\":0}";
+    QVERIFY(!DataParser::parseJsonData(json).isValid());
 }
 
 void TestDataParser::switchCommand()

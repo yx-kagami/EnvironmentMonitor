@@ -151,7 +151,7 @@ private:
     static bool isValidSensorObject(const QJsonObject &obj);
 
     // 从 JSON 对象取值，key 为 sensor1~sensor14
-    static double parseSensorValue(const QJsonObject &obj, const QString &key);
+    static bool parseSensorValue(const QJsonObject &obj, const QString &key, double *out);
 };
 
 #endif // SENSORDATA_H
